@@ -26,9 +26,9 @@ homepage = "https://github.com/John-Nagle/jpeg2000-decoder"
 name = "jpeg2000_decoder"
 path = "src/lib/lib.rs"
 
-[[bin]]
+[[example]]
 name = "jpeg2000_decoder"
-path = "src/bin/jpeg2000_decoder/main.rs" # replace bin.rs with name of your file
+path = "src/examples/jpeg2000_decoder/main.rs"
 
 [dependencies]
 
