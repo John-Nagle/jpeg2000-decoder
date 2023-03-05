@@ -15,9 +15,9 @@
 //! * prec -- bits per pixel per component.
 //! * bpp -- not used, deprecated. Ref: https://github.com/uclouvain/openjpeg/pull/1383
 //! * resno_decoded -- Not clear, should be the number of discard levels available.
-
+use anyhow::{anyhow};
 use crate::fetch::{build_agent, fetch_asset, err_is_retryable};
-use jpeg2k_sandboxed::{DecodeParameters, J2KImage};
+use jpeg2k_sandboxed::{Jpeg2kSandboxed, DecodeParameters, J2KImage, DecodeImageRequest};
 use std::convert;
 /*
 use anyhow::{Error};
@@ -59,8 +59,16 @@ impl convert::From<ureq::Error> for AssetError {
         AssetError::Http(err)
     }
 }
-impl convert::From<jpeg2k::error::Error> for AssetError {
-    fn from(err: jpeg2k::error::Error) -> AssetError {
+/// The decoder currently returns an empty as an error type. 
+impl convert::From<()> for AssetError {
+    fn from(err: ()) -> AssetError {
+        AssetError::Jpeg(anyhow!("JPEG decompression error, no other info available"))
+    }
+}
+
+/// The decoder currently returns an empty as an error type. 
+impl convert::From<anyhow::Error> for AssetError {
+    fn from(err: anyhow::Error) -> AssetError {
         AssetError::Jpeg(err)
     }
 }
@@ -89,6 +97,7 @@ impl FetchedImage {
     fn fetch(
         &mut self,
         agent: &ureq::Agent,
+        decoder: &Jpeg2kSandboxed,
         url: &str,
         max_size_opt: Option<u32>,
     ) -> Result<(), AssetError> {
@@ -102,13 +111,9 @@ impl FetchedImage {
             ////println!("Bounds: {:?}", bounds); // ***TEMP***
             let decode_parameters = DecodeParameters::default(); // default decode, best effort
             self.beginning_bytes = fetch_asset(agent, url, bounds)?; // fetch the asset
-            let decode_result =
-                J2KImage::from_bytes_with(&self.beginning_bytes, decode_parameters);
-                
-            let req = DecodeImageRequest::new_with(buf, params);
-
-  let decoder = Jpeg2kSandboxed::new()?;
-            let image = decoder.decode(&req)?;
+            //  BIG CLONE - FIX               
+            let req = DecodeImageRequest::new_with(self.beginning_bytes.clone(), decode_parameters);
+            let decode_result = decoder.decode(&req);
                 
             match decode_result {
                 Ok(v) => self.image_opt = Some(v),
@@ -127,9 +132,11 @@ impl FetchedImage {
             };
             //  Now fetch. Currently, from beginning, but we could optimize and reuse the first part.
             self.beginning_bytes = fetch_asset(agent, url, bounds)?; // fetch the asset
-            let decode_parameters = DecodeParameters::new().reduce(discard_level); // decoded to indicated level
-            let decode_result =
-                J2KImage::from_bytes_with(&self.beginning_bytes, decode_parameters);
+           //// let decode_parameters = DecodeParameters::new().reduce(discard_level); // decoded to indicated level
+            let decode_parameters = DecodeParameters { reduce: discard_level, .. Default::default() }; // default decode, best effort
+            //  BIG CLONE - FIX   
+            let req = DecodeImageRequest::new_with(self.beginning_bytes.clone(), decode_parameters);
+            let decode_result = decoder.decode(&req);
             match decode_result {
                 Ok(v) => self.image_opt = Some(v),
                 Err(e) => return Err(e.into()),
@@ -143,17 +150,19 @@ impl FetchedImage {
         if let Some(img) = &self.image_opt {
             if img.orig_width < 1 || img.orig_width > LARGEST_IMAGE_DIMENSION
             || img.orig_height < 1 || img.orig_height > LARGEST_IMAGE_DIMENSION {
-                return Err(AssetError::Content(format!("Image dimensions ({},{}) out of range", img.orig_width(), img.orig_height())));
+                return Err(AssetError::Content(format!("Image dimensions ({},{}) out of range", img.orig_width, img.orig_height)));
             }
-            if img.components().is_empty() || img.components().len() > 4 {
-                return Err(AssetError::Content(format!("Image component count {} of range", img.components().len())));
+            if img.num_components < 1 || img.num_components > 4 {
+                return Err(AssetError::Content(format!("Image component count {} of range", img.num_components)));
             }
+            /*
             for component in img.components().iter() {
                 //  Component precision is in bits
                 if component.precision() < 1 || component.precision() > 16 {
                     return Err(AssetError::Content(format!("Image component precision {} of range", component.precision())));
                 }
-            }                
+            } 
+            */               
             Ok(())
         } else {
             Err(AssetError::Content(format!("Image not fetched")))
@@ -163,13 +172,16 @@ impl FetchedImage {
     /// Statistics about the image
     fn get_image_stats(&self) -> Option<ImageStats> {
         if let Some(img) = &self.image_opt {
+            /*
             let mut bits_per_pixel = 0;
             for component in img.components().iter() {
                 bits_per_pixel += component.precision()
             }
+            */
             Some(ImageStats {
-                dimensions: (img.orig_width(), img.orig_height()),
-                bytes_per_pixel: ((bits_per_pixel + 7) / 8) as u8,
+                dimensions: (img.orig_width, img.orig_height),
+                ////bytes_per_pixel: ((bits_per_pixel + 7) / 8) as u8,
+                bytes_per_pixel: img.num_components as u8, // assumes bit depth of 8
             })
         } else {
             None
@@ -298,12 +310,12 @@ fn fetch_test_texture() {
     const TEXTURE_CAP: &str = "http://asset-cdn.glb.agni.lindenlab.com";
     const USER_AGENT: &str = "Test asset fetcher. Contact info@animats.com if problems.";
     const TEXTURE_OUT_SIZE: Option<u32> = Some(16);
-    let decoder = Jpeg2kSandboxed::new().except("Unable to create sandboxed decoder");
+    let decoder = Jpeg2kSandboxed::new().expect("Unable to create sandboxed decoder");
     let url = format!("{}/?texture_id={}", TEXTURE_CAP, TEXTURE_DEFAULT);
     println!("Asset url: {}", url);
     let agent = build_agent(USER_AGENT, 1);
     let mut image = FetchedImage::default();
-    image.fetch(&agent, &url, TEXTURE_OUT_SIZE).expect("Fetch failed");
+    image.fetch(&agent, &decoder, &url, TEXTURE_OUT_SIZE).expect("Fetch failed");
     assert!(image.image_opt.is_some()); // got image
     println!("Image stats: {:?}", image.get_image_stats());
     let img: DynamicImage = image.image_opt.unwrap()
@@ -328,7 +340,7 @@ fn fetch_multiple_textures_serial() {
     ////const TEST_UUIDS: &str = "samples/smalluuidlist.txt"; // test of UUIDs, relative to manifest dir
     const TEST_UUIDS: &str = "samples/bugislanduuidlist.txt"; // test of UUIDs at Bug Island, some of which have problems.
     const USER_AGENT: &str = "Test asset fetcher. Contact info@animats.com if problems.";
-    fn fetch_test_texture(agent: &ureq::Agent, decoder: &u8, uuid: &str, max_size: u32) {
+    fn fetch_test_texture(agent: &ureq::Agent, decoder: &Jpeg2kSandboxed, uuid: &str, max_size: u32) {
         const TEXTURE_CAP: &str = "http://asset-cdn.glb.agni.lindenlab.com";
         ////const TEXTURE_OUT_SIZE: Option<u32> = Some(2048);
         let url = format!("{}/?texture_id={}", TEXTURE_CAP, uuid);
@@ -336,13 +348,13 @@ fn fetch_multiple_textures_serial() {
         let now = std::time::Instant::now();
         let mut image = FetchedImage::default();
         // First fetch
-        image.fetch(&agent, &url, Some(16)).expect("Fetch failed");
+        image.fetch(&agent, decoder, &url, Some(16)).expect("Fetch failed");
         let fetch_time = now.elapsed();
         let now = std::time::Instant::now();
         assert!(image.image_opt.is_some()); // got image
         println!("Image stats: {:?}", image.get_image_stats());
         //  Second fetch, now that we have header info
-        image.fetch(&agent, &url, Some(max_size)).expect("Fetch failed");
+        image.fetch(&agent, decoder, &url, Some(max_size)).expect("Fetch failed");
         let img: DynamicImage = image.image_opt.unwrap()
             .try_into()
             .expect("Conversion failed"); // convert
@@ -361,7 +373,7 @@ fn fetch_multiple_textures_serial() {
         println!("File {} fetch: {:#?}, decode {:#?}: save: {:#?}", uuid, fetch_time.as_secs_f32(), decode_time.as_secs_f32(), save_time.as_secs_f32());
     }
     println!("---Fetch multiple textures serial start---");
-    let decoder = Jpeg2kSandboxed::new().except("Unable to create sandboxed decoder");
+    let decoder = Jpeg2kSandboxed::new().expect("Unable to create sandboxed decoder");
     //  Try all the files in the list
     let basedir = env!["CARGO_MANIFEST_DIR"];           // where the manifest is
     let file = std::fs::File::open(format!("{}/{}", basedir, TEST_UUIDS)).expect("Unable to open file of test UUIDs");

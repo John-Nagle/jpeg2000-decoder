@@ -11,7 +11,7 @@ use std::io::BufReader;
 use std::io::Read;
 use jpeg2k_sandboxed::{Jpeg2kSandboxed, DecodeParameters, J2KImage, DecodeImageRequest};
 
-////mod decode;
+mod decode;
 pub mod fetch;
 ////use decode::estimate_initial_read_size;
 
