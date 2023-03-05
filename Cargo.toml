@@ -39,9 +39,6 @@ path = "src/bin/jpeg2000_decoder/main.rs" # replace bin.rs with name of your fil
 #   The sandboxed decoder
 jpeg2k-sandboxed = "0.6"
 
-#   LLSD handler
-serde-llsd = "0.1.0"
-
 #   Images
 #### image = "0.24.5" -- jpeg2k needs an older version.
 image = "0.23.14"
