@@ -17,7 +17,7 @@
 //! * resno_decoded -- Not clear, should be the number of discard levels available.
 
 use crate::fetch::{build_agent, fetch_asset, err_is_retryable};
-use jpeg2k::DecodeParameters;
+use jpeg2k_sandboxed::{DecodeParameters, J2KImage};
 use std::convert;
 /*
 use anyhow::{Error};
@@ -35,7 +35,7 @@ pub enum AssetError {
     /// HTTP and network errors
     Http(ureq::Error),
     /// Decoder errors
-    Jpeg(jpeg2k::error::Error),
+    Jpeg(anyhow::Error),
     /// Content errors
     Content(String),
 }
@@ -81,7 +81,7 @@ pub struct FetchedImage {
     /// First bytes of the input file, if previously fetched.
     beginning_bytes: Vec<u8>,
     /// Image as read, but not exported
-    image_opt: Option<jpeg2k::Image>,
+    image_opt: Option<J2KImage>,
 }
 
 impl FetchedImage {
@@ -100,10 +100,16 @@ impl FetchedImage {
                 None
             };
             ////println!("Bounds: {:?}", bounds); // ***TEMP***
-            let decode_parameters = DecodeParameters::new(); // default decode, best effort
+            let decode_parameters = DecodeParameters::default(); // default decode, best effort
             self.beginning_bytes = fetch_asset(agent, url, bounds)?; // fetch the asset
             let decode_result =
-                jpeg2k::Image::from_bytes_with(&self.beginning_bytes, decode_parameters);
+                J2KImage::from_bytes_with(&self.beginning_bytes, decode_parameters);
+                
+            let req = DecodeImageRequest::new_with(buf, params);
+
+  let decoder = Jpeg2kSandboxed::new()?;
+            let image = decoder.decode(&req)?;
+                
             match decode_result {
                 Ok(v) => self.image_opt = Some(v),
                 Err(e) => return Err(e.into()),
@@ -123,7 +129,7 @@ impl FetchedImage {
             self.beginning_bytes = fetch_asset(agent, url, bounds)?; // fetch the asset
             let decode_parameters = DecodeParameters::new().reduce(discard_level); // decoded to indicated level
             let decode_result =
-                jpeg2k::Image::from_bytes_with(&self.beginning_bytes, decode_parameters);
+                J2KImage::from_bytes_with(&self.beginning_bytes, decode_parameters);
             match decode_result {
                 Ok(v) => self.image_opt = Some(v),
                 Err(e) => return Err(e.into()),
@@ -135,8 +141,8 @@ impl FetchedImage {
     /// Image sanity check. Size, precision, etc.
     fn sanity_check(&self) -> Result<(), AssetError> {
         if let Some(img) = &self.image_opt {
-            if img.orig_width() < 1 || img.orig_width() > LARGEST_IMAGE_DIMENSION
-            || img.orig_height() < 1 || img.orig_height() > LARGEST_IMAGE_DIMENSION {
+            if img.orig_width < 1 || img.orig_width > LARGEST_IMAGE_DIMENSION
+            || img.orig_height < 1 || img.orig_height > LARGEST_IMAGE_DIMENSION {
                 return Err(AssetError::Content(format!("Image dimensions ({},{}) out of range", img.orig_width(), img.orig_height())));
             }
             if img.components().is_empty() || img.components().len() > 4 {
@@ -292,6 +298,7 @@ fn fetch_test_texture() {
     const TEXTURE_CAP: &str = "http://asset-cdn.glb.agni.lindenlab.com";
     const USER_AGENT: &str = "Test asset fetcher. Contact info@animats.com if problems.";
     const TEXTURE_OUT_SIZE: Option<u32> = Some(16);
+    let decoder = Jpeg2kSandboxed::new().except("Unable to create sandboxed decoder");
     let url = format!("{}/?texture_id={}", TEXTURE_CAP, TEXTURE_DEFAULT);
     println!("Asset url: {}", url);
     let agent = build_agent(USER_AGENT, 1);
@@ -299,7 +306,7 @@ fn fetch_test_texture() {
     image.fetch(&agent, &url, TEXTURE_OUT_SIZE).expect("Fetch failed");
     assert!(image.image_opt.is_some()); // got image
     println!("Image stats: {:?}", image.get_image_stats());
-    let img: DynamicImage = (&image.image_opt.unwrap())
+    let img: DynamicImage = image.image_opt.unwrap()
         .try_into()
         .expect("Conversion failed"); // convert
 
@@ -321,7 +328,7 @@ fn fetch_multiple_textures_serial() {
     ////const TEST_UUIDS: &str = "samples/smalluuidlist.txt"; // test of UUIDs, relative to manifest dir
     const TEST_UUIDS: &str = "samples/bugislanduuidlist.txt"; // test of UUIDs at Bug Island, some of which have problems.
     const USER_AGENT: &str = "Test asset fetcher. Contact info@animats.com if problems.";
-    fn fetch_test_texture(agent: &ureq::Agent, uuid: &str, max_size: u32) {
+    fn fetch_test_texture(agent: &ureq::Agent, decoder: &u8, uuid: &str, max_size: u32) {
         const TEXTURE_CAP: &str = "http://asset-cdn.glb.agni.lindenlab.com";
         ////const TEXTURE_OUT_SIZE: Option<u32> = Some(2048);
         let url = format!("{}/?texture_id={}", TEXTURE_CAP, uuid);
@@ -336,7 +343,7 @@ fn fetch_multiple_textures_serial() {
         println!("Image stats: {:?}", image.get_image_stats());
         //  Second fetch, now that we have header info
         image.fetch(&agent, &url, Some(max_size)).expect("Fetch failed");
-        let img: DynamicImage = (&image.image_opt.unwrap())
+        let img: DynamicImage = image.image_opt.unwrap()
             .try_into()
             .expect("Conversion failed"); // convert
         let decode_time = now.elapsed();
@@ -354,6 +361,7 @@ fn fetch_multiple_textures_serial() {
         println!("File {} fetch: {:#?}, decode {:#?}: save: {:#?}", uuid, fetch_time.as_secs_f32(), decode_time.as_secs_f32(), save_time.as_secs_f32());
     }
     println!("---Fetch multiple textures serial start---");
+    let decoder = Jpeg2kSandboxed::new().except("Unable to create sandboxed decoder");
     //  Try all the files in the list
     let basedir = env!["CARGO_MANIFEST_DIR"];           // where the manifest is
     let file = std::fs::File::open(format!("{}/{}", basedir, TEST_UUIDS)).expect("Unable to open file of test UUIDs");
@@ -366,6 +374,6 @@ fn fetch_multiple_textures_serial() {
         if line.is_empty() { continue }
         if line.starts_with('#') { continue }
         println!("{}", line);
-        fetch_test_texture(&agent, line, TEXTURE_OUT_SIZE);
+        fetch_test_texture(&agent, &decoder, line, TEXTURE_OUT_SIZE);
     }
 }

@@ -1,22 +1,19 @@
 //! # jpeg2000-decoder  -- Decoder program for JPEG 2000 files.
 //!
 //  Animats
-//  April, 2021
+//  March, 2023
 //
-
-////use url::Url;
-////use std::path::Path;
-use anyhow::Error;
+use anyhow::{anyhow, Error};
 use image::DynamicImage;
 use image::GenericImageView;
-use jpeg2k::*;
 use std::fs::File;
 use std::io::BufReader;
 use std::io::Read;
+use jpeg2k_sandboxed::{Jpeg2kSandboxed, DecodeParameters, J2KImage, DecodeImageRequest};
 
-mod decode;
+////mod decode;
 pub mod fetch;
-use decode::estimate_initial_read_size;
+////use decode::estimate_initial_read_size;
 
 /// Arguments to the program
 #[derive(Clone, Debug, Default)]
@@ -108,9 +105,13 @@ fn decompress_one_url(
     } else {
         contents
     };
-    let decode_parameters = DecodeParameters::new().reduce(reduction.into());
+    let decoder = Jpeg2kSandboxed::new().expect("Unable to create sandboxed decoder");
+    ////let decode_parameters = DecodeParameters::new().reduce(reduction.into());
+    let decode_parameters = DecodeParameters { reduce: reduction.into(), .. Default::default() };
+    let req = DecodeImageRequest::new_with(contents, decode_parameters);
+    let jp2_image: J2KImage = decoder.decode(&req)?;
     ////println!("Decode parameters: {:?}", decode_parameters);
-    let jp2_image = Image::from_bytes_with(&contents, decode_parameters)?;
+    ////let jp2_image = J2KImage::from_bytes_with(&contents, decode_parameters)?;
     println!("Input file {}: {:?}", in_url, jp2_image);
     ////let jp2_image = Image::from_file(in_url)?; // load from file (not URL)
     /*
@@ -126,7 +127,7 @@ fn decompress_one_url(
         println!("Decompression time: {} secs.", elapsed);
     */
 
-    let img: DynamicImage = (&jp2_image).try_into()?; // convert
+    let img: DynamicImage = jp2_image.try_into().map_err(|_| anyhow!("JPEG 2000 conversion error, no other data available"))?; // convert
     println!(
         "Output file {}: ({}, {})",
         out_file,
