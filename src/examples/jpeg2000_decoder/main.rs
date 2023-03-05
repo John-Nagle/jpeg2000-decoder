@@ -6,10 +6,10 @@
 use anyhow::{anyhow, Error};
 use image::DynamicImage;
 use image::GenericImageView;
+use jpeg2k_sandboxed::{DecodeImageRequest, DecodeParameters, J2KImage, Jpeg2kSandboxed};
 use std::fs::File;
 use std::io::BufReader;
 use std::io::Read;
-use jpeg2k_sandboxed::{Jpeg2kSandboxed, DecodeParameters, J2KImage, DecodeImageRequest};
 
 /// Arguments to the program
 #[derive(Clone, Debug, Default)]
@@ -24,8 +24,6 @@ struct ArgInfo {
     pub reduction_factor: u8,
     /// Verbose mode. Goes to standard error if LLSD mode.
     pub verbose: bool,
-    /// User agent for HTTP requests.
-    pub user_agent: String,
 }
 
 //
@@ -47,8 +45,11 @@ fn parseargs() -> ArgInfo {
             .add_option(&["-i", "--infile"], Store, "Input URL or file.");
         ap.refer(&mut arginfo.out_file)
             .add_option(&["-o", "--outfile"], Store, "Output file.");
-        ap.refer(&mut arginfo.reduction_factor)
-            .add_option(&["-r", "--reduction"], Store, "Reduction factor.");
+        ap.refer(&mut arginfo.reduction_factor).add_option(
+            &["-r", "--reduction"],
+            Store,
+            "Reduction factor.",
+        );
         ap.refer(&mut arginfo.max_size).add_option(
             &["--maxsize"],
             Store,
@@ -91,11 +92,16 @@ fn decompress_one_url(
         contents
     };
     let decoder = Jpeg2kSandboxed::new().expect("Unable to create sandboxed decoder");
-    let decode_parameters = DecodeParameters { reduce: reduction.into(), .. Default::default() };
+    let decode_parameters = DecodeParameters {
+        reduce: reduction.into(),
+        ..Default::default()
+    };
     let req = DecodeImageRequest::new_with(contents, decode_parameters);
     let jp2_image: J2KImage = decoder.decode(&req)?;
-    
-    let img: DynamicImage = jp2_image.try_into().map_err(|_| anyhow!("JPEG 2000 conversion error, no other data available"))?; // convert
+
+    let img: DynamicImage = jp2_image
+        .try_into()
+        .map_err(|_| anyhow!("JPEG 2000 conversion error, no other data available"))?; // convert
     if verbose {
         println!("Input file {}", in_url);
         println!(
@@ -115,7 +121,7 @@ fn main() {
     ////eprintln!("args: {:?}", args); // ***TEMP***
     let status = decompress_one_url(
         args.in_file.as_str(),
-        args.out_file.as_str(),           
+        args.out_file.as_str(),
         args.max_size,
         args.reduction_factor,
         args.verbose,

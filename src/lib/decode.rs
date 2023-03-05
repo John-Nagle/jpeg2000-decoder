@@ -15,11 +15,10 @@
 //! * prec -- bits per pixel per component.
 //! * bpp -- not used, deprecated. Ref: https://github.com/uclouvain/openjpeg/pull/1383
 //! * resno_decoded -- Not clear, should be the number of discard levels available.
-use anyhow::{anyhow};
-use crate::fetch::{fetch_asset, err_is_retryable};
-use jpeg2k_sandboxed::{Jpeg2kSandboxed, DecodeParameters, J2KImage, DecodeImageRequest};
+use crate::fetch::{err_is_retryable, fetch_asset};
+use anyhow::anyhow;
+use jpeg2k_sandboxed::{DecodeImageRequest, DecodeParameters, J2KImage, Jpeg2kSandboxed};
 use std::convert;
-
 
 /// Things that can go wrong with an asset.
 #[derive(Debug)]
@@ -51,14 +50,14 @@ impl convert::From<ureq::Error> for AssetError {
         AssetError::Http(Box::new(err))
     }
 }
-/// The decoder currently returns an empty as an error type. 
+/// The decoder currently returns an empty as an error type.
 impl convert::From<()> for AssetError {
     fn from(_err: ()) -> AssetError {
         AssetError::Jpeg(anyhow!("JPEG decompression error, no other info available"))
     }
 }
 
-/// The decoder currently returns an empty as an error type. 
+/// The decoder currently returns an empty as an error type.
 impl convert::From<anyhow::Error> for AssetError {
     fn from(err: anyhow::Error) -> AssetError {
         AssetError::Jpeg(err)
@@ -73,7 +72,6 @@ pub struct ImageStats {
     /// Original dimensions of image.
     pub dimensions: (u32, u32),
 }
-
 
 /// JPEG 2000 image currently being fetched.
 //  Not saving beginning bytes for re-use because the decompressor consumes the input vector.
@@ -94,53 +92,80 @@ impl FetchedImage {
     ) -> Result<(), AssetError> {
         if self.image_opt.is_none() {
             //  No previous info. Fetch with guess as to size.
+            /*
             let bounds: Option<(u32, u32)> = if let Some(max_size) = max_size_opt {
                 Some((0, estimate_initial_read_size(max_size))) // first guess
             } else {
                 None
             };
+            */
+            let bounds = max_size_opt.map(|max_size| (0, estimate_initial_read_size(max_size)));
             let decode_parameters = DecodeParameters::default(); // default decode, best effort
             let content = fetch_asset(agent, url, bounds)?; // fetch the asset
             let req = DecodeImageRequest::new_with(content, decode_parameters);
             let decode_result = decoder.decode(&req);
-            log::debug!("Decompressed with no discard level. {}, file bounds {:?}, error: {}", url, bounds, decode_result.is_err());
+            log::debug!(
+                "Decompressed with no discard level. {}, file bounds {:?}, error: {}",
+                url,
+                bounds,
+                decode_result.is_err()
+            );
             match decode_result {
                 Ok(v) => self.image_opt = Some(v),
                 Err(e) => return Err(e.into()),
             };
-            self.sanity_check()                     // sanity check before decode
+            self.sanity_check() // sanity check before decode
         } else {
             //  We have a previous image and can be more accurate.
-            let stats = self.get_image_stats().unwrap();    // should alwasy get, we just tested for image presence.
+            let stats = self.get_image_stats().unwrap(); // should alwasy get, we just tested for image presence.
             let (bounds, discard_level) = if let Some(max_size) = max_size_opt {
-                let (max_bytes, discard_level) = estimate_read_size(stats.dimensions, stats.bytes_per_pixel, max_size);
-                (Some((0, max_bytes)), discard_level)  // calc bounds to read
+                let (max_bytes, discard_level) =
+                    estimate_read_size(stats.dimensions, stats.bytes_per_pixel, max_size);
+                (Some((0, max_bytes)), discard_level) // calc bounds to read
             } else {
-                (None, 0)                                    // caller wants full size
+                (None, 0) // caller wants full size
             };
             //  Now fetch. Currently, from beginning, but we could optimize and reuse the first part.
             let content = fetch_asset(agent, url, bounds)?; // fetch the asset
-            let decode_parameters = DecodeParameters { reduce: discard_level, .. Default::default() }; // default decode, best effort
+            let decode_parameters = DecodeParameters {
+                reduce: discard_level,
+                ..Default::default()
+            }; // default decode, best effort
             let req = DecodeImageRequest::new_with(content, decode_parameters);
             let decode_result = decoder.decode(&req);
-            log::debug!("Decompressed texture {}, file bounds {:?}, discard level {}, error: {}", url, bounds, discard_level, decode_result.is_err());
+            log::debug!(
+                "Decompressed texture {}, file bounds {:?}, discard level {}, error: {}",
+                url,
+                bounds,
+                discard_level,
+                decode_result.is_err()
+            );
             match decode_result {
                 Ok(v) => self.image_opt = Some(v),
                 Err(e) => return Err(e.into()),
             };
-            self.sanity_check()                     // sanity check before decode
+            self.sanity_check() // sanity check before decode
         }
     }
-    
+
     /// Image sanity check. Size, precision, etc.
     fn sanity_check(&self) -> Result<(), AssetError> {
         if let Some(img) = &self.image_opt {
-            if img.orig_width < 1 || img.orig_width > LARGEST_IMAGE_DIMENSION
-            || img.orig_height < 1 || img.orig_height > LARGEST_IMAGE_DIMENSION {
-                return Err(AssetError::Content(format!("Image dimensions ({},{}) out of range", img.orig_width, img.orig_height)));
+            if img.orig_width < 1
+                || img.orig_width > LARGEST_IMAGE_DIMENSION
+                || img.orig_height < 1
+                || img.orig_height > LARGEST_IMAGE_DIMENSION
+            {
+                return Err(AssetError::Content(format!(
+                    "Image dimensions ({},{}) out of range",
+                    img.orig_width, img.orig_height
+                )));
             }
             if img.num_components < 1 || img.num_components > 4 {
-                return Err(AssetError::Content(format!("Image component count {} of range", img.num_components)));
+                return Err(AssetError::Content(format!(
+                    "Image component count {} of range",
+                    img.num_components
+                )));
             }
             //  Can't check precision in the sandboxed version, because precision is not exported.
             Ok(())
@@ -148,24 +173,13 @@ impl FetchedImage {
             Err(AssetError::Content("Image not fetched".to_string()))
         }
     }
-    
-    /// Statistics about the image
+
+    /// Statistics about the image. None if image not loaded.
     fn get_image_stats(&self) -> Option<ImageStats> {
-        if let Some(img) = &self.image_opt {
-            /*
-            let mut bits_per_pixel = 0;
-            for component in img.components().iter() {
-                bits_per_pixel += component.precision()
-            }
-            */
-            Some(ImageStats {
-                dimensions: (img.orig_width, img.orig_height),
-                ////bytes_per_pixel: ((bits_per_pixel + 7) / 8) as u8,
-                bytes_per_pixel: img.num_components as u8, // assumes bit depth of 8
-            })
-        } else {
-            None
-        }
+        self.image_opt.as_ref().map(|img| ImageStats {
+            dimensions: (img.orig_width, img.orig_height),
+            bytes_per_pixel: img.num_components as u8, // assumes bit depth of 8, because we can't read component info in sandbox mode.
+        })
     }
 }
 
@@ -181,11 +195,7 @@ const LARGEST_IMAGE_DIMENSION: u32 = 8192;
 ///
 /// Returns (max bytes, discard level).
 /// Discard level 0 is full size, 1 is 1/4 size, etc.
-pub fn estimate_read_size(
-    image_size: (u32, u32),
-    bytes_per_pixel: u8,
-    max_dim: u32,
-) -> (u32, u32) {
+pub fn estimate_read_size(image_size: (u32, u32), bytes_per_pixel: u8, max_dim: u32) -> (u32, u32) {
     assert!(max_dim > 0); // would cause divide by zero
     let reduction_ratio = image_size.0.max(image_size.1) / max_dim;
     if reduction_ratio < 2 {
@@ -194,9 +204,10 @@ pub fn estimate_read_size(
     //  Not full size, will be reducing.
     let in_pixels = image_size.0 * image_size.1;
     let out_pixels = in_pixels / (reduction_ratio * reduction_ratio); // number of pixels desired in output
-    
-       //  Read this many bytes and decode.
-    let max_bytes = (((out_pixels as f32) * (bytes_per_pixel as f32)) * JPEG_2000_COMPRESSION_FACTOR) as u32;
+
+    //  Read this many bytes and decode.
+    let max_bytes =
+        (((out_pixels as f32) * (bytes_per_pixel as f32)) * JPEG_2000_COMPRESSION_FACTOR) as u32;
     let max_bytes = max_bytes.max(MINIMUM_SIZE_TO_READ);
     //  Reduction ratio 1 -> discard level 0, 4->1, 16->2, etc. Round down.
     let discard_level = calc_discard_level(reduction_ratio); // ***SCALE***
@@ -213,7 +224,7 @@ fn calc_discard_level(reduction_ratio: u32) -> u32 {
     assert!(reduction_ratio > 0);
     for i in 0..16 {
         if 2_u32.pow(i) >= reduction_ratio {
-            return i
+            return i;
         }
     }
     panic!("Argument to calc_discard_level is out of range.");
@@ -221,7 +232,7 @@ fn calc_discard_level(reduction_ratio: u32) -> u32 {
 
 /// Estimate when we don't know what the image size is.
 pub fn estimate_initial_read_size(max_dim: u32) -> u32 {
-    const BYTES_PER_PIXEL: u8 = 4;  // worst case estimate
+    const BYTES_PER_PIXEL: u8 = 4; // worst case estimate
     let square = |x| x * x; // ought to be built in
     if max_dim > LARGEST_IMAGE_DIMENSION {
         // to avoid overflow
@@ -256,13 +267,19 @@ fn test_estimate_read_size() {
     //  Don't know size of JPEG 2000 image.
     assert_eq!(estimate_initial_read_size(1), MINIMUM_SIZE_TO_READ);
     assert_eq!(estimate_initial_read_size(64), 14745); // given constant values above, 90% of output image area.
-    assert_eq!(estimate_initial_read_size(32), MINIMUM_SIZE_TO_READ.max(3686)); // given constant values above, 90% of output image area.
-                                                      //  Know size of JPEG 2000 image.
+    assert_eq!(
+        estimate_initial_read_size(32),
+        MINIMUM_SIZE_TO_READ.max(3686)
+    ); // given constant values above, 90% of output image area.
+       //  Know size of JPEG 2000 image.
     assert_eq!(
         estimate_read_size((64, 64), BYTES_PER_PIXEL, 64),
         (u32::MAX, 0)
     );
-    assert_eq!(estimate_read_size((64, 64), BYTES_PER_PIXEL, 32), (MINIMUM_SIZE_TO_READ.max(3686), 1)); // 2:1 reduction
+    assert_eq!(
+        estimate_read_size((64, 64), BYTES_PER_PIXEL, 32),
+        (MINIMUM_SIZE_TO_READ.max(3686), 1)
+    ); // 2:1 reduction
     assert_eq!(
         estimate_read_size((512, 512), BYTES_PER_PIXEL, 32),
         (MINIMUM_SIZE_TO_READ.max(3686), 4)
@@ -283,8 +300,8 @@ fn test_estimate_read_size() {
 
 #[test]
 fn fetch_test_texture() {
-    use image::DynamicImage;
     use crate::build_agent;
+    use image::DynamicImage;
     use image::GenericImageView;
     const TEXTURE_DEFAULT: &str = "89556747-24cb-43ed-920b-47caed15465f"; // plywood in both Second Life and Open Simulator
     const TEXTURE_CAP: &str = "http://asset-cdn.glb.agni.lindenlab.com";
@@ -295,10 +312,14 @@ fn fetch_test_texture() {
     println!("Asset url: {}", url);
     let agent = build_agent(USER_AGENT, 1);
     let mut image = FetchedImage::default();
-    image.fetch(&agent, &decoder, &url, TEXTURE_OUT_SIZE).expect("Fetch failed");
+    image
+        .fetch(&agent, &decoder, &url, TEXTURE_OUT_SIZE)
+        .expect("Fetch failed");
     assert!(image.image_opt.is_some()); // got image
     println!("Image stats: {:?}", image.get_image_stats());
-    let img: DynamicImage = image.image_opt.unwrap()
+    let img: DynamicImage = image
+        .image_opt
+        .unwrap()
         .try_into()
         .expect("Conversion failed"); // convert
 
@@ -314,14 +335,19 @@ fn fetch_test_texture() {
 
 #[test]
 fn fetch_multiple_textures_serial() {
+    use crate::build_agent;
     use image::DynamicImage;
     use image::GenericImageView;
-    use crate::build_agent;
     use std::io::BufRead;
     ////const TEST_UUIDS: &str = "samples/smalluuidlist.txt"; // test of UUIDs, relative to manifest dir
     const TEST_UUIDS: &str = "samples/bugislanduuidlist.txt"; // test of UUIDs at Bug Island, some of which have problems.
     const USER_AGENT: &str = "Test asset fetcher. Contact info@animats.com if problems.";
-    fn fetch_test_texture(agent: &ureq::Agent, decoder: &Jpeg2kSandboxed, uuid: &str, max_size: u32) {
+    fn fetch_test_texture(
+        agent: &ureq::Agent,
+        decoder: &Jpeg2kSandboxed,
+        uuid: &str,
+        max_size: u32,
+    ) {
         const TEXTURE_CAP: &str = "http://asset-cdn.glb.agni.lindenlab.com";
         ////const TEXTURE_OUT_SIZE: Option<u32> = Some(2048);
         let url = format!("{}/?texture_id={}", TEXTURE_CAP, uuid);
@@ -329,14 +355,20 @@ fn fetch_multiple_textures_serial() {
         let now = std::time::Instant::now();
         let mut image = FetchedImage::default();
         // First fetch
-        image.fetch(&agent, decoder, &url, Some(16)).expect("Fetch failed");
+        image
+            .fetch(&agent, decoder, &url, Some(16))
+            .expect("Fetch failed");
         let fetch_time = now.elapsed();
         let now = std::time::Instant::now();
         assert!(image.image_opt.is_some()); // got image
         println!("Image stats: {:?}", image.get_image_stats());
         //  Second fetch, now that we have header info
-        image.fetch(&agent, decoder, &url, Some(max_size)).expect("Fetch failed");
-        let img: DynamicImage = image.image_opt.unwrap()
+        image
+            .fetch(&agent, decoder, &url, Some(max_size))
+            .expect("Fetch failed");
+        let img: DynamicImage = image
+            .image_opt
+            .unwrap()
             .try_into()
             .expect("Conversion failed"); // convert
         let decode_time = now.elapsed();
@@ -351,21 +383,32 @@ fn fetch_multiple_textures_serial() {
         );
         img.save(out_file).expect("File save failed"); // save as PNG file
         let save_time = now.elapsed();
-        println!("File {} fetch: {:#?}, decode {:#?}: save: {:#?}", uuid, fetch_time.as_secs_f32(), decode_time.as_secs_f32(), save_time.as_secs_f32());
+        println!(
+            "File {} fetch: {:#?}, decode {:#?}: save: {:#?}",
+            uuid,
+            fetch_time.as_secs_f32(),
+            decode_time.as_secs_f32(),
+            save_time.as_secs_f32()
+        );
     }
     println!("---Fetch multiple textures serial start---");
     let decoder = Jpeg2kSandboxed::new().expect("Unable to create sandboxed decoder");
     //  Try all the files in the list
-    let basedir = env!["CARGO_MANIFEST_DIR"];           // where the manifest is
-    let file = std::fs::File::open(format!("{}/{}", basedir, TEST_UUIDS)).expect("Unable to open file of test UUIDs");
+    let basedir = env!["CARGO_MANIFEST_DIR"]; // where the manifest is
+    let file = std::fs::File::open(format!("{}/{}", basedir, TEST_UUIDS))
+        .expect("Unable to open file of test UUIDs");
     let reader = std::io::BufReader::new(file);
     const TEXTURE_OUT_SIZE: u32 = 128;
     let agent = build_agent(USER_AGENT, 1);
-    for line in reader.lines() { 
+    for line in reader.lines() {
         let line = line.expect("Error reading UUID file");
         let line = line.trim();
-        if line.is_empty() { continue }
-        if line.starts_with('#') { continue }
+        if line.is_empty() {
+            continue;
+        }
+        if line.starts_with('#') {
+            continue;
+        }
         println!("{}", line);
         fetch_test_texture(&agent, &decoder, line, TEXTURE_OUT_SIZE);
     }
