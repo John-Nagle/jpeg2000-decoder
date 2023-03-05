@@ -16,18 +16,10 @@
 //! * bpp -- not used, deprecated. Ref: https://github.com/uclouvain/openjpeg/pull/1383
 //! * resno_decoded -- Not clear, should be the number of discard levels available.
 use anyhow::{anyhow};
-use crate::fetch::{build_agent, fetch_asset, err_is_retryable};
+use crate::fetch::{fetch_asset, err_is_retryable};
 use jpeg2k_sandboxed::{Jpeg2kSandboxed, DecodeParameters, J2KImage, DecodeImageRequest};
 use std::convert;
-/*
-use anyhow::{Error};
-use jpeg2k::*;
-use image::{DynamicImage};
-use std::fs::File;
-use std::io::Read;
-use std::io::BufReader;
-use image::GenericImageView;
-*/
+
 
 /// Things that can go wrong with an asset.
 #[derive(Debug)]
@@ -61,7 +53,7 @@ impl convert::From<ureq::Error> for AssetError {
 }
 /// The decoder currently returns an empty as an error type. 
 impl convert::From<()> for AssetError {
-    fn from(err: ()) -> AssetError {
+    fn from(_err: ()) -> AssetError {
         AssetError::Jpeg(anyhow!("JPEG decompression error, no other info available"))
     }
 }
@@ -77,9 +69,9 @@ impl convert::From<anyhow::Error> for AssetError {
 #[derive(Debug)]
 pub struct ImageStats {
     /// Bytes per pixel, rounded up from bits.
-    bytes_per_pixel: u8,
+    pub bytes_per_pixel: u8,
     /// Original dimensions of image.
-    dimensions: (u32, u32),
+    pub dimensions: (u32, u32),
 }
 
 
@@ -93,7 +85,7 @@ pub struct FetchedImage {
 
 impl FetchedImage {
     /// Fetch image from server at indicated size.
-    fn fetch(
+    pub fn fetch(
         &mut self,
         agent: &ureq::Agent,
         decoder: &Jpeg2kSandboxed,
