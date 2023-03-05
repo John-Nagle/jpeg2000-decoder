@@ -25,7 +25,7 @@ use std::convert;
 #[derive(Debug)]
 pub enum AssetError {
     /// HTTP and network errors
-    Http(ureq::Error),
+    Http(Box<ureq::Error>),
     /// Decoder errors
     Jpeg(anyhow::Error),
     /// Content errors
@@ -48,7 +48,7 @@ impl AssetError {
 //
 impl convert::From<ureq::Error> for AssetError {
     fn from(err: ureq::Error) -> AssetError {
-        AssetError::Http(err)
+        AssetError::Http(Box::new<err>)
     }
 }
 /// The decoder currently returns an empty as an error type. 
