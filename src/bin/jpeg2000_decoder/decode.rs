@@ -84,10 +84,9 @@ pub struct ImageStats {
 
 
 /// JPEG 2000 image currently being fetched.
+//  Not saving beginning bytes for re-use because the decompressor consumes the input vector.
 #[derive(Default)]
 pub struct FetchedImage {
-    /// First bytes of the input file, if previously fetched.
-    beginning_bytes: Vec<u8>,
     /// Image as read, but not exported
     image_opt: Option<J2KImage>,
 }
@@ -108,18 +107,15 @@ impl FetchedImage {
             } else {
                 None
             };
-            ////println!("Bounds: {:?}", bounds); // ***TEMP***
             let decode_parameters = DecodeParameters::default(); // default decode, best effort
-            self.beginning_bytes = fetch_asset(agent, url, bounds)?; // fetch the asset
-            //  BIG CLONE - FIX               
-            let req = DecodeImageRequest::new_with(self.beginning_bytes.clone(), decode_parameters);
+            let content = fetch_asset(agent, url, bounds)?; // fetch the asset
+            let req = DecodeImageRequest::new_with(content, decode_parameters);
             let decode_result = decoder.decode(&req);
-                
+            log::debug!("Decompressed with no discard level. {}, file bounds {:?}, error: {}", url, bounds, decode_result.is_err());
             match decode_result {
                 Ok(v) => self.image_opt = Some(v),
                 Err(e) => return Err(e.into()),
             };
-            ////self.image_opt = Some(jpeg2k::Image::from_bytes_with(&self.beginning_bytes, decode_parameters).map_err(into)?);
             self.sanity_check()                     // sanity check before decode
         } else {
             //  We have a previous image and can be more accurate.
@@ -131,12 +127,11 @@ impl FetchedImage {
                 (None, 0)                                    // caller wants full size
             };
             //  Now fetch. Currently, from beginning, but we could optimize and reuse the first part.
-            self.beginning_bytes = fetch_asset(agent, url, bounds)?; // fetch the asset
-           //// let decode_parameters = DecodeParameters::new().reduce(discard_level); // decoded to indicated level
+            let content = fetch_asset(agent, url, bounds)?; // fetch the asset
             let decode_parameters = DecodeParameters { reduce: discard_level, .. Default::default() }; // default decode, best effort
-            //  BIG CLONE - FIX   
-            let req = DecodeImageRequest::new_with(self.beginning_bytes.clone(), decode_parameters);
+            let req = DecodeImageRequest::new_with(content, decode_parameters);
             let decode_result = decoder.decode(&req);
+            log::debug!("Decompressed texture {}, file bounds {:?}, discard level {}, error: {}", url, bounds, discard_level, decode_result.is_err());
             match decode_result {
                 Ok(v) => self.image_opt = Some(v),
                 Err(e) => return Err(e.into()),
@@ -155,14 +150,7 @@ impl FetchedImage {
             if img.num_components < 1 || img.num_components > 4 {
                 return Err(AssetError::Content(format!("Image component count {} of range", img.num_components)));
             }
-            /*
-            for component in img.components().iter() {
-                //  Component precision is in bits
-                if component.precision() < 1 || component.precision() > 16 {
-                    return Err(AssetError::Content(format!("Image component precision {} of range", component.precision())));
-                }
-            } 
-            */               
+            //  Can't check precision in the sandboxed version, because precision is not exported.
             Ok(())
         } else {
             Err(AssetError::Content(format!("Image not fetched")))
@@ -191,7 +179,6 @@ impl FetchedImage {
 
 /// Conservative estimate of how much JPEG 2000 reduces size
 const JPEG_2000_COMPRESSION_FACTOR: f32 = 0.9;
-
 /// Below 1024, JPEG 2000 files tend to break down. This is one packet with room for HTTP headers.
 const MINIMUM_SIZE_TO_READ: u32 = 1024;
 /// 8192 x 8192 should be a big enough texture for anyone

@@ -110,9 +110,7 @@ fn decompress_one_url(
     let decode_parameters = DecodeParameters { reduce: reduction.into(), .. Default::default() };
     let req = DecodeImageRequest::new_with(contents, decode_parameters);
     let jp2_image: J2KImage = decoder.decode(&req)?;
-    ////println!("Decode parameters: {:?}", decode_parameters);
-    ////let jp2_image = J2KImage::from_bytes_with(&contents, decode_parameters)?;
-    println!("Input file {}: {:?}", in_url, jp2_image);
+    println!("Input file {}", in_url);
     ////let jp2_image = Image::from_file(in_url)?; // load from file (not URL)
     /*
         //  ***TEMP*** timing test - result is about 30ms per image.
@@ -154,7 +152,7 @@ fn main() {
         )
     };
     if let Err(e) = status {
-        eprintln!("Error: {:?}", e);
+        eprintln!("Decoder error: {:?}", e);
         std::process::exit(1);
     }
 }
