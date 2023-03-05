@@ -91,18 +91,20 @@ fn decompress_one_url(
         contents
     };
     let decoder = Jpeg2kSandboxed::new().expect("Unable to create sandboxed decoder");
-    ////let decode_parameters = DecodeParameters::new().reduce(reduction.into());
     let decode_parameters = DecodeParameters { reduce: reduction.into(), .. Default::default() };
     let req = DecodeImageRequest::new_with(contents, decode_parameters);
     let jp2_image: J2KImage = decoder.decode(&req)?;
-    println!("Input file {}", in_url);
+    
     let img: DynamicImage = jp2_image.try_into().map_err(|_| anyhow!("JPEG 2000 conversion error, no other data available"))?; // convert
-    println!(
-        "Output file {}: ({}, {})",
-        out_file,
-        img.width(),
-        img.height()
-    );
+    if verbose {
+        println!("Input file {}", in_url);
+        println!(
+            "Output file {}: ({}, {})",
+            out_file,
+            img.width(),
+            img.height()
+        );
+    }
     img.save(out_file)?; // save as PNG file
     Ok(())
 }

@@ -32,6 +32,7 @@ pub fn err_is_retryable(e: &ureq::Error) -> bool {
 
 /// Fetch asset from asset server.
 /// Returns ureq::Error, so we can distinguish retryable errors.
+#[allow(clippy::result_large_err)]  // ureq's error type is big. Can't fix that here.
 fn fetch_asset_once(
     agent: &Agent,
     url: &str,
@@ -39,12 +40,12 @@ fn fetch_asset_once(
 ) -> Result<Vec<u8>, ureq::Error> {
     //  Build query, which may have a byte range specified.
     let query = if let Some(byte_range) = byte_range_opt {
-        agent.get(&url).set(
+        agent.get(url).set(
             "Range",
             format!("bytes={}-{}", byte_range.0, byte_range.1).as_str(),
         )
     } else {
-        agent.get(&url)
+        agent.get(url)
     };
     //  HTTP/HTTPS read.
     let resp = query.call()?;
@@ -56,6 +57,7 @@ fn fetch_asset_once(
 /// Fetch asset from asset server, with retries
 /// Returns ureq::Error, so we can distinguish retryable errors.
 //  This should log retries, but we currently have no way to report them.
+#[allow(clippy::result_large_err)]  // ureq's error type is big. Can't fix that here.
 pub fn fetch_asset(
     agent: &Agent,
     url: &str,

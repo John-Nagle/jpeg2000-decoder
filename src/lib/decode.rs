@@ -48,7 +48,7 @@ impl AssetError {
 //
 impl convert::From<ureq::Error> for AssetError {
     fn from(err: ureq::Error) -> AssetError {
-        AssetError::Http(Box::new<err>)
+        AssetError::Http(Box::new(err))
     }
 }
 /// The decoder currently returns an empty as an error type. 
@@ -145,7 +145,7 @@ impl FetchedImage {
             //  Can't check precision in the sandboxed version, because precision is not exported.
             Ok(())
         } else {
-            Err(AssetError::Content(format!("Image not fetched")))
+            Err(AssetError::Content("Image not fetched".to_string()))
         }
     }
     
@@ -187,7 +187,7 @@ pub fn estimate_read_size(
     max_dim: u32,
 ) -> (u32, u32) {
     assert!(max_dim > 0); // would cause divide by zero
-    let reduction_ratio = (image_size.0.max(image_size.1)) as u32 / (max_dim as u32);
+    let reduction_ratio = image_size.0.max(image_size.1) / max_dim;
     if reduction_ratio < 2 {
         return (u32::MAX, 0); // full size
     }
@@ -212,8 +212,8 @@ pub fn estimate_read_size(
 fn calc_discard_level(reduction_ratio: u32) -> u32 {
     assert!(reduction_ratio > 0);
     for i in 0..16 {
-        if 2_u32.pow(i) as u32 >= reduction_ratio {
-            return i.try_into().expect("calc discard level overflow");
+        if 2_u32.pow(i) >= reduction_ratio {
+            return i
         }
     }
     panic!("Argument to calc_discard_level is out of range.");
@@ -283,7 +283,8 @@ fn test_estimate_read_size() {
 
 #[test]
 fn fetch_test_texture() {
-    use crate::DynamicImage;
+    use image::DynamicImage;
+    use crate::build_agent;
     use image::GenericImageView;
     const TEXTURE_DEFAULT: &str = "89556747-24cb-43ed-920b-47caed15465f"; // plywood in both Second Life and Open Simulator
     const TEXTURE_CAP: &str = "http://asset-cdn.glb.agni.lindenlab.com";
@@ -313,8 +314,9 @@ fn fetch_test_texture() {
 
 #[test]
 fn fetch_multiple_textures_serial() {
-    use crate::DynamicImage;
+    use image::DynamicImage;
     use image::GenericImageView;
+    use crate::build_agent;
     use std::io::BufRead;
     ////const TEST_UUIDS: &str = "samples/smalluuidlist.txt"; // test of UUIDs, relative to manifest dir
     const TEST_UUIDS: &str = "samples/bugislanduuidlist.txt"; // test of UUIDs at Bug Island, some of which have problems.
