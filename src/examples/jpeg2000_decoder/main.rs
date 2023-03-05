@@ -1,5 +1,5 @@
-//! # jpeg2000-decoder  -- Decoder program for JPEG 2000 files.
-//!
+//! # jpeg2000-decoder  -- Decoder example for JPEG 2000 files.
+//
 //  Animats
 //  March, 2023
 //
@@ -38,7 +38,7 @@ fn parseargs() -> ArgInfo {
     };
     {
         //  This block limits scope of borrows by ap.refer() method
-        use argparse::{ArgumentParser, Store}; // only visible here
+        use argparse::{ArgumentParser, Store, StoreTrue}; // only visible here
         let mut ap = ArgumentParser::new();
         ap.set_description("Decoder for JPEG 2000 files.");
         ap.refer(&mut arginfo.in_file)
@@ -56,7 +56,7 @@ fn parseargs() -> ArgInfo {
             "Maximum dimension of output image",
         );
         ap.refer(&mut arginfo.verbose)
-            .add_option(&["-v", "--verbose"], Store, "Verbose mode.");
+            .add_option(&["-v", "--verbose"], StoreTrue, "Verbose mode.");
         ap.parse_args_or_exit();
     }
     //  Check for required args

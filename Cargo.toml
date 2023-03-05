@@ -1,7 +1,7 @@
 #
-#   JPEG 2000 decoder.
+#   JPEG 2000 decoder library
 #
-#   Decoding, which uses OpenJPEG in C, runs in a subprocess, for safety.
+#   Decoding, which uses OpenJPEG in C, runs in a sandbox, for safety.
 #
 #   Usable targets:
 #   - native (on Linux)
@@ -10,7 +10,7 @@
 #
 [package]
 name = "jpeg2000-decoder"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["John Nagle <nagle@animats.com>"]
 license = "LGPL"
@@ -18,9 +18,6 @@ description = "JPEG 2000 image loader."
 keywords = ["j2k", "jp2", "jpeg2000", "image"]
 repository = "https://github.com/John-Nagle/jpeg2000-decoder"
 homepage = "https://github.com/John-Nagle/jpeg2000-decoder"
-
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
 name = "jpeg2000_decoder"
@@ -31,10 +28,6 @@ name = "jpeg2000_decoder"
 path = "src/examples/jpeg2000_decoder/main.rs"
 
 [dependencies]
-
-#   The OpenJPEG decoder.
-####jpeg2k = "0.6.2"
-####jpeg2k = {version = ">=0.6.3", default-features = false, features = ["image", "strict-mode"]}
 
 #   The sandboxed decoder
 jpeg2k-sandboxed = "0.6"
