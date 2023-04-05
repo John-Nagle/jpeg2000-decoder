@@ -369,3 +369,81 @@ fn fetch_multiple_textures_serial() {
         fetch_test_texture(&agent, line, TEXTURE_OUT_SIZE);
     }
 }
+
+#[test]
+fn fetch_multiple_textures_parallel() {
+    use crate::DynamicImage;
+    use image::GenericImageView;
+    use std::io::BufRead;
+    ////const TEST_UUIDS: &str = "samples/smalluuidlist.txt"; // test of UUIDs, relative to manifest dir
+    const TEST_UUIDS: &str = "samples/bugislanduuidlist.txt"; // test of UUIDs at Bug Island, some of which have problems.
+    const USER_AGENT: &str = "Test asset fetcher. Contact info@animats.com if problems.";
+    fn fetch_test_texture(agent: &ureq::Agent, uuid: &str, max_size: u32) {
+        const TEXTURE_CAP: &str = "http://asset-cdn.glb.agni.lindenlab.com";
+        ////const TEXTURE_OUT_SIZE: Option<u32> = Some(2048);
+        let url = format!("{}/?texture_id={}", TEXTURE_CAP, uuid);
+        println!("Asset url: {}", url);
+        let now = std::time::Instant::now();
+        let mut image = FetchedImage::default();
+        // First fetch
+        image.fetch(&agent, &url, Some(16)).expect("Fetch failed");
+        let fetch_time = now.elapsed();
+        let now = std::time::Instant::now();
+        assert!(image.image_opt.is_some()); // got image
+        println!("Image stats: {:?}", image.get_image_stats());
+        //  Second fetch, now that we have header info
+        image.fetch(&agent, &url, Some(max_size)).expect("Fetch failed");
+        let img: DynamicImage = (&image.image_opt.unwrap())
+            .try_into()
+            .expect("Conversion failed"); // convert
+        let decode_time = now.elapsed();
+        let now = std::time::Instant::now();
+
+        let out_file = format!("/tmp/TEST-{}.png", uuid); // Linux only
+        println!(
+            "Output file {}: ({}, {})",
+            out_file,
+            img.width(),
+            img.height()
+        );
+        img.save(out_file).expect("File save failed"); // save as PNG file
+        let save_time = now.elapsed();
+        println!("File {} fetch: {:#?}, decode {:#?}: save: {:#?}", uuid, fetch_time.as_secs_f32(), decode_time.as_secs_f32(), save_time.as_secs_f32());
+    }
+    println!("---Fetch multiple textures parallel start---");
+    //  Try all the files in the list
+    use crossbeam_channel::unbounded;
+    let basedir = env!["CARGO_MANIFEST_DIR"];           // where the manifest is
+    let file = std::fs::File::open(format!("{}/{}", basedir, TEST_UUIDS)).expect("Unable to open file of test UUIDs");
+    let reader = std::io::BufReader::new(file);
+    const TEXTURE_OUT_SIZE: u32 = 128;
+    let agent = build_agent(USER_AGENT, 1);
+    let (sender,receiver) = unbounded();
+    for read_result in reader.lines() { 
+        let line = read_result.expect("Error reading UUID file");
+        let line = line.trim().to_string();
+        if line.is_empty() { continue }
+        if line.starts_with('#') { continue }
+        sender.send(line.clone());
+    }
+    //  Start worker threads.
+    let mut workers = Vec::new();
+    const WORKERS: usize = 20;  // push hard here
+    println!("Starting {} worker threads.", WORKERS);
+    for _ in 0..WORKERS {
+        let agent_clone = agent.clone();
+        let receiver_clone = receiver.clone();
+        let worker = std::thread::spawn(move || { 
+            while let Ok(item) = receiver_clone.recv() {
+                fetch_test_texture(&agent_clone, &item, TEXTURE_OUT_SIZE);
+            }
+        });
+        println!("Started thread {}", workers.len());
+        workers.push(worker);
+    }
+    println!("Started {} worker threads.", workers.len());
+    for worker in workers { 
+        worker.join();
+    }
+    println!("Done.");
+}
