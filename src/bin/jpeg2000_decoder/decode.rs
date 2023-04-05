@@ -389,7 +389,19 @@ fn fetch_multiple_textures_parallel() {
         let now = std::time::Instant::now();
         let mut image = FetchedImage::default();
         // First fetch
-        image.fetch(&agent, &url, Some(16)).map_err(|e| anyhow!("Fetch error: {:?}",e))?;
+        let stat = image.fetch(&agent, &url, Some(16));
+        if let Err(e) = stat {
+            println!("Fetch error for url {}: {:?}", uuid, e);
+            match e {
+                AssetError::Http(ureq::Error::Status(http_status,_)) => {                   
+                    if http_status == 404 {
+                        return Ok(())   // ignore file not found problem
+                    }
+                }
+                _ => {}
+            }
+            return Err(anyhow!("Fetch error for url {}: {:?}", uuid, e));
+        }
         let fetch_time = now.elapsed();
         let now = std::time::Instant::now();
         assert!(image.image_opt.is_some()); // got image
