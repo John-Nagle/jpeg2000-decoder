@@ -375,10 +375,13 @@ fn fetch_multiple_textures_parallel() {
     use crate::DynamicImage;
     use image::GenericImageView;
     use std::io::BufRead;
+    use core::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
+    use anyhow::{anyhow, Error};
     ////const TEST_UUIDS: &str = "samples/smalluuidlist.txt"; // test of UUIDs, relative to manifest dir
     const TEST_UUIDS: &str = "samples/biguuidlist.txt"; // test of UUIDs at Bug Island, some of which have problems.
     const USER_AGENT: &str = "Test asset fetcher. Contact info@animats.com if problems.";
-    fn fetch_test_texture(agent: &ureq::Agent, uuid: &str, max_size: u32) {
+    fn fetch_test_texture(agent: &ureq::Agent, uuid: &str, max_size: u32) -> Result<(), Error> {
         const TEXTURE_CAP: &str = "http://asset-cdn.glb.agni.lindenlab.com";
         ////const TEXTURE_OUT_SIZE: Option<u32> = Some(2048);
         let url = format!("{}/?texture_id={}", TEXTURE_CAP, uuid);
@@ -386,13 +389,13 @@ fn fetch_multiple_textures_parallel() {
         let now = std::time::Instant::now();
         let mut image = FetchedImage::default();
         // First fetch
-        image.fetch(&agent, &url, Some(16)).expect("Fetch failed");
+        image.fetch(&agent, &url, Some(16)).map_err(|e| anyhow!("Fetch error: {:?}",e))?;
         let fetch_time = now.elapsed();
         let now = std::time::Instant::now();
         assert!(image.image_opt.is_some()); // got image
         println!("Image stats: {:?}", image.get_image_stats());
         //  Second fetch, now that we have header info
-        image.fetch(&agent, &url, Some(max_size)).expect("Fetch failed");
+        image.fetch(&agent, &url, Some(max_size)).map_err(|e| anyhow!("Fetch error: {:?}",e))?;
         let img: DynamicImage = (&image.image_opt.unwrap())
             .try_into()
             .expect("Conversion failed"); // convert
@@ -409,6 +412,7 @@ fn fetch_multiple_textures_parallel() {
         img.save(out_file).expect("File save failed"); // save as PNG file
         let save_time = now.elapsed();
         println!("File {} fetch: {:#?}, decode {:#?}: save: {:#?}", uuid, fetch_time.as_secs_f32(), decode_time.as_secs_f32(), save_time.as_secs_f32());
+        Ok(())
     }
     println!("---Fetch multiple textures parallel start---");
     //  Try all the files in the list
@@ -432,14 +436,21 @@ fn fetch_multiple_textures_parallel() {
     //  Start worker threads.
     let mut workers = Vec::new();
     const WORKERS: usize = 50;  // push hard here
+    
+    let fail = Arc::new(AtomicBool::new(false));
     println!("Starting {} worker threads to decompress {} files.", WORKERS, receiver.len());
     for n in 0..WORKERS {
         let agent_clone = agent.clone();
         let receiver_clone = receiver.clone();
+        let fail_clone = Arc::clone(&fail);
         let worker = std::thread::spawn(move || {
             println!("Thread {} starting.", n);
             while let Ok(item) = receiver_clone.recv() {
-                fetch_test_texture(&agent_clone, &item, TEXTURE_OUT_SIZE);
+                if fail_clone.load(Ordering::Relaxed) { break; }
+                if let Err(e) = fetch_test_texture(&agent_clone, &item, TEXTURE_OUT_SIZE) {
+                    println!("Thread {} error: {:?}", n, e);
+                    fail_clone.store(true, Ordering::Relaxed); // note fail
+                }
             }
             println!("Thread {} done.", n);
         });
@@ -451,5 +462,6 @@ fn fetch_multiple_textures_parallel() {
         println!("Waiting for threads to finish.");
         worker.join();
     }
+    if fail.load(std::sync::atomic::Ordering::Relaxed) { panic!("A decode or fetch failed."); }
     println!("Done.");
 }
