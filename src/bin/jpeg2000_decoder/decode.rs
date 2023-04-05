@@ -430,19 +430,22 @@ fn fetch_multiple_textures_parallel() {
     let mut workers = Vec::new();
     const WORKERS: usize = 20;  // push hard here
     println!("Starting {} worker threads.", WORKERS);
-    for _ in 0..WORKERS {
+    for n in 0..WORKERS {
         let agent_clone = agent.clone();
         let receiver_clone = receiver.clone();
-        let worker = std::thread::spawn(move || { 
+        let worker = std::thread::spawn(move || {
+            println!("Thread {} starting.");
             while let Ok(item) = receiver_clone.recv() {
                 fetch_test_texture(&agent_clone, &item, TEXTURE_OUT_SIZE);
             }
+            println!("Thread {} done.");
         });
         println!("Started thread {}", workers.len());
         workers.push(worker);
     }
     println!("Started {} worker threads.", workers.len());
-    for worker in workers { 
+    for (n,worker in workers.enumerate() { 
+        println!("Waiting for thread {} to finish.",n);
         worker.join();
     }
     println!("Done.");
