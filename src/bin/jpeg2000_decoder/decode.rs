@@ -418,34 +418,37 @@ fn fetch_multiple_textures_parallel() {
     let reader = std::io::BufReader::new(file);
     const TEXTURE_OUT_SIZE: u32 = 128;
     let agent = build_agent(USER_AGENT, 1);
-    let (sender,receiver) = unbounded();
-    for read_result in reader.lines() { 
-        let line = read_result.expect("Error reading UUID file");
-        let line = line.trim().to_string();
-        if line.is_empty() { continue }
-        if line.starts_with('#') { continue }
-        sender.send(line.clone());
-    }
+    let receiver = {
+        let (sender,receiver) = unbounded();
+        for read_result in reader.lines() { 
+            let line = read_result.expect("Error reading UUID file");
+            let line = line.trim().to_string();
+            if line.is_empty() { continue }
+            if line.starts_with('#') { continue }
+            sender.send(line.clone());
+        }
+        receiver                                        // drop sender, for EOF
+    };
     //  Start worker threads.
     let mut workers = Vec::new();
-    const WORKERS: usize = 20;  // push hard here
-    println!("Starting {} worker threads.", WORKERS);
+    const WORKERS: usize = 1;  // push hard here
+    println!("Starting {} worker threads to decompress {} files.", WORKERS, receiver.len());
     for n in 0..WORKERS {
         let agent_clone = agent.clone();
         let receiver_clone = receiver.clone();
         let worker = std::thread::spawn(move || {
-            println!("Thread {} starting.");
+            println!("Thread {} starting.", n);
             while let Ok(item) = receiver_clone.recv() {
                 fetch_test_texture(&agent_clone, &item, TEXTURE_OUT_SIZE);
             }
-            println!("Thread {} done.");
+            println!("Thread {} done.", n);
         });
         println!("Started thread {}", workers.len());
         workers.push(worker);
     }
     println!("Started {} worker threads.", workers.len());
-    for (n,worker in workers.enumerate() { 
-        println!("Waiting for thread {} to finish.",n);
+    for worker in workers { 
+        println!("Waiting for threads to finish.");
         worker.join();
     }
     println!("Done.");
