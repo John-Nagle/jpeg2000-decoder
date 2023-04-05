@@ -376,7 +376,7 @@ fn fetch_multiple_textures_parallel() {
     use image::GenericImageView;
     use std::io::BufRead;
     ////const TEST_UUIDS: &str = "samples/smalluuidlist.txt"; // test of UUIDs, relative to manifest dir
-    const TEST_UUIDS: &str = "samples/bugislanduuidlist.txt"; // test of UUIDs at Bug Island, some of which have problems.
+    const TEST_UUIDS: &str = "samples/biguuidlist.txt"; // test of UUIDs at Bug Island, some of which have problems.
     const USER_AGENT: &str = "Test asset fetcher. Contact info@animats.com if problems.";
     fn fetch_test_texture(agent: &ureq::Agent, uuid: &str, max_size: u32) {
         const TEXTURE_CAP: &str = "http://asset-cdn.glb.agni.lindenlab.com";
@@ -416,7 +416,7 @@ fn fetch_multiple_textures_parallel() {
     let basedir = env!["CARGO_MANIFEST_DIR"];           // where the manifest is
     let file = std::fs::File::open(format!("{}/{}", basedir, TEST_UUIDS)).expect("Unable to open file of test UUIDs");
     let reader = std::io::BufReader::new(file);
-    const TEXTURE_OUT_SIZE: u32 = 128;
+    const TEXTURE_OUT_SIZE: u32 = 1024;
     let agent = build_agent(USER_AGENT, 1);
     let receiver = {
         let (sender,receiver) = unbounded();
@@ -431,7 +431,7 @@ fn fetch_multiple_textures_parallel() {
     };
     //  Start worker threads.
     let mut workers = Vec::new();
-    const WORKERS: usize = 1;  // push hard here
+    const WORKERS: usize = 50;  // push hard here
     println!("Starting {} worker threads to decompress {} files.", WORKERS, receiver.len());
     for n in 0..WORKERS {
         let agent_clone = agent.clone();
