@@ -53,3 +53,4 @@ url = "2.3.1"
 
 #   For tests.
 crossbeam-channel = "0.5"
+thread-priority = "0.13"

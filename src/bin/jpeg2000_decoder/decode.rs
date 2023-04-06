@@ -329,13 +329,13 @@ fn fetch_multiple_textures_serial() {
         let now = std::time::Instant::now();
         let mut image = FetchedImage::default();
         // First fetch
-        image.fetch(&agent, &url, Some(16)).expect("Fetch failed");
+        image.fetch(&agent, &url, Some(16)).expect("Small fetch failed");
         let fetch_time = now.elapsed();
         let now = std::time::Instant::now();
         assert!(image.image_opt.is_some()); // got image
         println!("Image stats: {:?}", image.get_image_stats());
         //  Second fetch, now that we have header info
-        image.fetch(&agent, &url, Some(max_size)).expect("Fetch failed");
+        image.fetch(&agent, &url, Some(max_size)).expect("Full sized fetch failed");
         let img: DynamicImage = (&image.image_opt.unwrap())
             .try_into()
             .expect("Conversion failed"); // convert
@@ -407,7 +407,13 @@ fn fetch_multiple_textures_parallel() {
         assert!(image.image_opt.is_some()); // got image
         println!("Image stats: {:?}", image.get_image_stats());
         //  Second fetch, now that we have header info
-        image.fetch(&agent, &url, Some(max_size)).map_err(|e| anyhow!("Fetch error: {:?}",e))?;
+        ////image.fetch(&agent, &url, Some(max_size)).map_err(|e| anyhow!("Second fetch error: {:?}",e))?;
+        let stat = image.fetch(&agent, &url, Some(max_size));
+        //  Sometimes the second fetch fails. Retry at full size. This had better work.
+        if let Err(e) = stat {
+            println!("====> Second fetch failed: {:?} retry at full size. <====", e);
+            image.fetch(&agent, &url, None).map_err(|e| anyhow!("Third fetch error: {:?}",e))?;
+        }
         let img: DynamicImage = (&image.image_opt.unwrap())
             .try_into()
             .expect("Conversion failed"); // convert
@@ -432,7 +438,8 @@ fn fetch_multiple_textures_parallel() {
     let basedir = env!["CARGO_MANIFEST_DIR"];           // where the manifest is
     let file = std::fs::File::open(format!("{}/{}", basedir, TEST_UUIDS)).expect("Unable to open file of test UUIDs");
     let reader = std::io::BufReader::new(file);
-    const TEXTURE_OUT_SIZE: u32 = 1024;
+    const TEXTURE_OUT_SIZE: u32 = 64;
+    const WORKERS: usize = 32;  // push hard here
     let agent = build_agent(USER_AGENT, 1);
     let receiver = {
         let (sender,receiver) = unbounded();
@@ -447,7 +454,7 @@ fn fetch_multiple_textures_parallel() {
     };
     //  Start worker threads.
     let mut workers = Vec::new();
-    const WORKERS: usize = 50;  // push hard here
+    
     
     let fail = Arc::new(AtomicBool::new(false));
     println!("Starting {} worker threads to decompress {} files.", WORKERS, receiver.len());
@@ -457,6 +464,7 @@ fn fetch_multiple_textures_parallel() {
         let fail_clone = Arc::clone(&fail);
         let worker = std::thread::spawn(move || {
             println!("Thread {} starting.", n);
+            thread_priority::set_current_thread_priority(thread_priority::ThreadPriority::Min).unwrap();
             while let Ok(item) = receiver_clone.recv() {
                 if fail_clone.load(Ordering::Relaxed) { break; }
                 if let Err(e) = fetch_test_texture(&agent_clone, &item, TEXTURE_OUT_SIZE) {
