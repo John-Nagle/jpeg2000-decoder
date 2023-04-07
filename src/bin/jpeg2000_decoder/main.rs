@@ -1,11 +1,9 @@
 //! # jpeg2000-decoder  -- Decoder program for JPEG 2000 files.
 //!
 //  Animats
-//  April, 2021
+//  April, 2023
 //
 
-////use url::Url;
-////use std::path::Path;
 use anyhow::Error;
 use image::DynamicImage;
 use image::GenericImageView;
@@ -14,9 +12,7 @@ use std::fs::File;
 use std::io::BufReader;
 use std::io::Read;
 
-mod decode;
-pub mod fetch;
-use decode::estimate_initial_read_size;
+use jpeg2000_decoder::{estimate_initial_read_size, fetch_asset};
 
 /// Arguments to the program
 #[derive(Clone, Debug, Default)]
@@ -29,12 +25,8 @@ struct ArgInfo {
     pub max_size: usize,
     /// Reduction factor
     pub reduction_factor: u8,
-    /// If true, ignore above fields and read LLSD commands from input.
-    pub llsd_mode: bool,
-    /// Verbose mode. Goes to standard error if LLSD mode.
+    /// Verbose mode
     pub verbose: bool,
-    /// User agent for HTTP requests.
-    pub user_agent: String,
 }
 
 //
@@ -65,27 +57,18 @@ fn parseargs() -> ArgInfo {
         );
         ap.refer(&mut arginfo.verbose)
             .add_option(&["-v", "--verbose"], Store, "Verbose mode.");
-        ap.refer(&mut arginfo.llsd_mode)
-            .add_option(&["--llsd"], Store, "LLSD mode");
         ap.parse_args_or_exit();
     }
     //  Check for required args
-    if !arginfo.llsd_mode {
-        if arginfo.in_url.is_empty() || arginfo.out_file.is_empty() {
-            eprintln!("If LLSD mode is off, an input URL and an output file must be specified");
-            std::process::exit(1);
-        }
+    if arginfo.in_url.is_empty() || arginfo.out_file.is_empty() {
+        eprintln!("An input URL and an output file must be specified");
+        std::process::exit(1);
     }
     arginfo
 }
 
-/// LLSD mode
-fn run_llsd_mode(verbose: bool) -> Result<(), Error> {
-    todo!()
-}
-
 /// Decompress one URL or file mode.
-fn decompress_one_url(
+fn decompress_one_file(
     in_url: &str,
     out_file: &str,
     max_size: usize,
@@ -141,17 +124,13 @@ fn decompress_one_url(
 fn main() {
     let args = parseargs();
     eprintln!("args: {:?}", args); // ***TEMP***
-    let status = if args.llsd_mode {
-        run_llsd_mode(args.verbose)
-    } else {
-        decompress_one_url(
-            args.in_url.as_str(),
-            args.out_file.as_str(),           
-            args.max_size,
-            args.reduction_factor,
-            args.verbose,
-        )
-    };
+    let status = decompress_one_file(
+        args.in_url.as_str(),
+        args.out_file.as_str(),           
+        args.max_size,
+        args.reduction_factor,
+        args.verbose,
+    );
     if let Err(e) = status {
         eprintln!("Error: {:?}", e);
         std::process::exit(1);

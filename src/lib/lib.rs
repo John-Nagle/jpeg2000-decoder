@@ -1,14 +1,10 @@
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+//! # jpeg2000-decoder.lib - library for fetching assets in JPEG 2000 format.
+//
+//  Primarily for Second Life/Open Simulator assets.
+//
+mod decode;
+mod fetch;
+//  Exported symbols
+pub use fetch::{fetch_asset};
+pub use decode::{AssetError, ImageStats, FetchedImage};
+pub use decode::{estimate_initial_read_size};

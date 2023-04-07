@@ -3,8 +3,7 @@
 //  Animats
 //  February, 2022
 //
-//  Loader for mesh and sculpt assets.
-//  Called from threads in the asset load thread pool.
+//  Loader for texture assets
 //
 use std::time::Duration;
 use ureq::{Agent, AgentBuilder};
