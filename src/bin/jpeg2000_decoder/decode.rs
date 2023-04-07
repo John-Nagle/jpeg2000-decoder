@@ -438,8 +438,8 @@ fn fetch_multiple_textures_parallel() {
     let basedir = env!["CARGO_MANIFEST_DIR"];           // where the manifest is
     let file = std::fs::File::open(format!("{}/{}", basedir, TEST_UUIDS)).expect("Unable to open file of test UUIDs");
     let reader = std::io::BufReader::new(file);
-    const TEXTURE_OUT_SIZE: u32 = 64;
-    const WORKERS: usize = 32;  // push hard here
+    const TEXTURE_OUT_SIZE: u32 = 512;
+    const WORKERS: usize = 48;  // push hard here
     let agent = build_agent(USER_AGENT, 1);
     let receiver = {
         let (sender,receiver) = unbounded();
