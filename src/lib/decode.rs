@@ -17,6 +17,8 @@
 //! * resno_decoded -- Not clear, should be the number of discard levels available.
 
 use crate::fetch::{build_agent, fetch_asset, err_is_retryable};
+use image::DynamicImage;
+use image::GenericImageView;
 use jpeg2k::DecodeParameters;
 use std::convert;
 /*
@@ -286,7 +288,7 @@ fn test_estimate_read_size() {
 
 #[test]
 fn fetch_test_texture() {
-    use crate::DynamicImage;
+    use image::DynamicImage;
     use image::GenericImageView;
     const TEXTURE_DEFAULT: &str = "89556747-24cb-43ed-920b-47caed15465f"; // plywood in both Second Life and Open Simulator
     const TEXTURE_CAP: &str = "http://asset-cdn.glb.agni.lindenlab.com";
@@ -315,7 +317,7 @@ fn fetch_test_texture() {
 
 #[test]
 fn fetch_multiple_textures_serial() {
-    use crate::DynamicImage;
+    use image::DynamicImage;
     use image::GenericImageView;
     use std::io::BufRead;
     ////const TEST_UUIDS: &str = "samples/smalluuidlist.txt"; // test of UUIDs, relative to manifest dir
@@ -372,7 +374,7 @@ fn fetch_multiple_textures_serial() {
 
 #[test]
 fn fetch_multiple_textures_parallel() {
-    use crate::DynamicImage;
+    use image::DynamicImage;
     use image::GenericImageView;
     use std::io::BufRead;
     use core::sync::atomic::{AtomicBool, Ordering};
