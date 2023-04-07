@@ -380,8 +380,8 @@ fn fetch_multiple_textures_parallel() {
     use core::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
     use anyhow::{anyhow, Error};
-    ////const TEST_UUIDS: &str = "samples/smalluuidlist.txt"; // test of UUIDs, relative to manifest dir
-    const TEST_UUIDS: &str = "samples/biguuidlist.txt"; // test of UUIDs at Bug Island, some of which have problems.
+    const TEST_UUIDS: &str = "samples/bugislanduuidlist.txt"; // test of UUIDs at Bug Island, some of which have problems.
+    ////const TEST_UUIDS: &str = "samples/biguuidlist.txt"; // Larger 44K list of non-public UUIDs.
     const USER_AGENT: &str = "Test asset fetcher. Contact info@animats.com if problems.";
     fn fetch_test_texture(agent: &ureq::Agent, uuid: &str, max_size: u32) -> Result<(), Error> {
         const TEXTURE_CAP: &str = "http://asset-cdn.glb.agni.lindenlab.com";
