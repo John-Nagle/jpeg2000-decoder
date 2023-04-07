@@ -4,7 +4,9 @@
 //
 mod decode;
 mod fetch;
+mod pvqueue;
 //  Exported symbols
 pub use fetch::{fetch_asset};
 pub use decode::{AssetError, ImageStats, FetchedImage};
 pub use decode::{estimate_initial_read_size};
+pub use pvqueue::{PvQueue};

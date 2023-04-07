@@ -49,7 +49,8 @@ ureq = "2.6.2"
 #   Misc.
 anyhow = "1"
 argparse = "0.2.2"
-url = "2.3.1"
+url = "2.3"
+parking_lot = "0.12"
 
 #   For tests.
 crossbeam-channel = "0.5"
