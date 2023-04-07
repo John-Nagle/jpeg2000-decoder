@@ -9,4 +9,4 @@ mod pvqueue;
 pub use fetch::{fetch_asset};
 pub use decode::{AssetError, ImageStats, FetchedImage};
 pub use decode::{estimate_initial_read_size};
-pub use pvqueue::{PvQueue};
+pub use pvqueue::{PvQueue, PvQueueLink};

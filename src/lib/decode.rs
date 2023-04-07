@@ -114,7 +114,7 @@ impl FetchedImage {
             self.sanity_check()                     // sanity check before decode
         } else {
             //  We have a previous image and can be more accurate.
-            let stats = self.get_image_stats().unwrap();    // should alwasy get, we just tested for image presence.
+            let stats = self.get_image_stats().unwrap();    // should always get, we just tested for image presence.
             let (bounds, discard_level) = if let Some(max_size) = max_size_opt {
                 let (max_bytes, discard_level) = estimate_read_size(stats.dimensions, stats.bytes_per_pixel, max_size);
                 (Some((0, max_bytes)), discard_level)  // calc bounds to read
@@ -380,10 +380,11 @@ fn fetch_multiple_textures_parallel() {
     use core::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
     use anyhow::{anyhow, Error};
+    use crate::{PvQueue, PvQueueLink};
     const TEST_UUIDS: &str = "samples/bugislanduuidlist.txt"; // test of UUIDs at Bug Island, some of which have problems.
     ////const TEST_UUIDS: &str = "samples/biguuidlist.txt"; // Larger 44K list of non-public UUIDs.
     const USER_AGENT: &str = "Test asset fetcher. Contact info@animats.com if problems.";
-    fn fetch_test_texture(agent: &ureq::Agent, uuid: &str, max_size: u32) -> Result<(), Error> {
+    fn fetch_test_texture(agent: &ureq::Agent, uuid: &str, max_size: u32, bottleneck: &PvQueueLink) -> Result<(), Error> {
         const TEXTURE_CAP: &str = "http://asset-cdn.glb.agni.lindenlab.com";
         ////const TEXTURE_OUT_SIZE: Option<u32> = Some(2048);
         let url = format!("{}/?texture_id={}", TEXTURE_CAP, uuid);
@@ -416,10 +417,15 @@ fn fetch_multiple_textures_parallel() {
             println!("====> Second fetch failed: {:?} retry at full size. <====", e);
             image.fetch(&agent, &url, None).map_err(|e| anyhow!("Third fetch error: {:?}",e))?;
         }
-        let img: DynamicImage = (&image.image_opt.unwrap())
-            .try_into()
-            .expect("Conversion failed"); // convert
-        let decode_time = now.elapsed();
+        let (img, decode_time) = {   //  Bottleneck the decode process.
+            PvQueue::lock(bottleneck);
+            let now = std::time::Instant::now();
+            let img: DynamicImage = (&image.image_opt.unwrap())
+                .try_into()
+                .expect("Conversion failed"); // convert
+            let decode_time = now.elapsed();
+            (img, decode_time)
+        };
         let now = std::time::Instant::now();
 
         let out_file = format!("/tmp/TEST-{}.png", uuid); // Linux only
@@ -442,6 +448,8 @@ fn fetch_multiple_textures_parallel() {
     let reader = std::io::BufReader::new(file);
     const TEXTURE_OUT_SIZE: u32 = 512;
     const WORKERS: usize = 48;  // push hard here
+    const BOTTLENECK_COUNT: u32 = 8;            // no more than this many at one time in compute-bound decode
+    let bottleneck = PvQueue::new(BOTTLENECK_COUNT);
     let agent = build_agent(USER_AGENT, 1);
     let receiver = {
         let (sender,receiver) = unbounded();
@@ -464,12 +472,13 @@ fn fetch_multiple_textures_parallel() {
         let agent_clone = agent.clone();
         let receiver_clone = receiver.clone();
         let fail_clone = Arc::clone(&fail);
+        let bottleneck_clone = Arc::clone(&bottleneck);
         let worker = std::thread::spawn(move || {
             println!("Thread {} starting.", n);
             thread_priority::set_current_thread_priority(thread_priority::ThreadPriority::Min).unwrap();
             while let Ok(item) = receiver_clone.recv() {
                 if fail_clone.load(Ordering::Relaxed) { break; }
-                if let Err(e) = fetch_test_texture(&agent_clone, &item, TEXTURE_OUT_SIZE) {
+                if let Err(e) = fetch_test_texture(&agent_clone, &item, TEXTURE_OUT_SIZE, &bottleneck_clone) {
                     println!("Thread {} error: {:?}", n, e);
                     fail_clone.store(true, Ordering::Relaxed); // note fail
                 }
