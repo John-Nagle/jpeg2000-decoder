@@ -106,13 +106,18 @@ impl FetchedImage {
         self.fetch_and_decode_single(&agent, &url, Some(INITIAL_FETCH_SIZE), bottleneck_opt)?;
         assert!(self.image_opt.is_some()); // got image
         if let Some(max_size) = max_size_opt {
-            if max_size <= INITIAL_FETCH_SIZE { return Ok(()) }    // already big enough
+            if max_size <= INITIAL_FETCH_SIZE {
+                return Ok(())      // already big enough
+            }
         }
-        if self.image_opt.as_ref().unwrap().orig_height() <= INITIAL_FETCH_SIZE 
-        && self.image_opt.as_ref().unwrap().orig_width() <= INITIAL_FETCH_SIZE {
+        if self.image_opt.as_ref().unwrap().orig_width() <= INITIAL_FETCH_SIZE 
+        && self.image_opt.as_ref().unwrap().orig_height() <= INITIAL_FETCH_SIZE {
+            println!("Tiny image: {}: dimensions: [{}, {}]", url, self.image_opt.as_ref().unwrap().orig_width(), self.image_opt.as_ref().unwrap().orig_height() ); // ***TEMP***
             return Ok(());                         // as big as it will get
         }
         //  Second fetch, now that we have header info.
+        self.fetch_and_decode_single(&agent, &url, max_size_opt, bottleneck_opt)
+        /*
         let stat = self.fetch_and_decode_single(&agent, &url, max_size_opt, bottleneck_opt);
         //  Sometimes the second fetch fails. Retry at full size. This had better work.
         if let Err(e) = &stat {
@@ -122,6 +127,7 @@ impl FetchedImage {
             //  ***NEED TO DOWNSIZE IMAGE***
         }
         Ok(())
+        */
     }
 
     /// Fetch image from server at indicated size.
@@ -432,44 +438,14 @@ fn fetch_multiple_textures_parallel() {
     use anyhow::{anyhow, Error};
     use crate::{PvQueue, PvQueueLink};
     simple_logger::init_with_level(log::Level::Error).unwrap();    // so logging shows up
+    log::error!("Errors go to standard output.");
     ////const TEST_UUIDS: &str = "samples/bugislanduuidlist.txt"; // test of UUIDs at Bug Island, some of which have problems.
     const TEST_UUIDS: &str = "samples/biguuidlist.txt"; // Larger 44K list of non-public UUIDs.
     const USER_AGENT: &str = "Test asset fetcher. Contact info@animats.com if problems.";
     fn fetch_test_texture(agent: &ureq::Agent, uuid: &str, max_size: u32, bottleneck: &PvQueueLink) -> Result<(), Error> {
         const TEXTURE_CAP: &str = "http://asset-cdn.glb.agni.lindenlab.com";
-        ////const TEXTURE_OUT_SIZE: Option<u32> = Some(2048);
         let url = format!("{}/?texture_id={}", TEXTURE_CAP, uuid);
-        ////println!("Asset url: {}", url);
-        ////let now = std::time::Instant::now();
         let mut image = FetchedImage::default();
-        /*
-        // First fetch
-        let stat = image.fetch_and_decode_single(&agent, &url, Some(16), Some(&bottleneck));
-        if let Err(e) = stat {
-            println!("Fetch error for url {}: {:?}", uuid, e);
-            match e {
-                AssetError::Http(ureq::Error::Status(http_status,_)) => {                   
-                    if http_status == 404 {
-                        return Ok(())   // ignore file not found problem
-                    }
-                }
-                _ => {}
-            }
-            return Err(anyhow!("Fetch error for url {}: {:?}", uuid, e));
-        }
-        let fetch_time = now.elapsed();
-        let now = std::time::Instant::now();
-        assert!(image.image_opt.is_some()); // got image
-        println!("Image stats: {:?}", image.get_image_stats());
-        //  Second fetch, now that we have header info
-        ////image.fetch(&agent, &url, Some(max_size)).map_err(|e| anyhow!("Second fetch error: {:?}",e))?;
-        let stat = image.fetch_and_decode_single(&agent, &url, Some(max_size), Some(&bottleneck));
-        //  Sometimes the second fetch fails. Retry at full size. This had better work.
-        if let Err(e) = stat {
-            println!("====> Second fetch failed: {:?} retry at full size. <====", e);
-            image.fetch_and_decode_single(&agent, &url, None, Some(&bottleneck)).map_err(|e| anyhow!("Third fetch error: {:?}",e))?;
-        }
-        */
         let stat = image.fetch(&agent, &url, Some(max_size), Some(bottleneck));
         if let Err(e) = stat {
             println!("Fetch error for url {}: {:?}", uuid, e);
@@ -488,13 +464,8 @@ fn fetch_multiple_textures_parallel() {
         let img: DynamicImage = (&image.image_opt.unwrap())
             .try_into()
             .expect("Conversion failed"); // convert
-        let decode_time = now.elapsed();
-        let now = std::time::Instant::now();
-
         let out_file = format!("/tmp/TEST-{}.png", uuid); // Linux only
         img.save(out_file).expect("File save failed"); // save as PNG file
-        ////let save_time = now.elapsed();
-        ////println!("File {} fetch: {:#?}, decode {:#?}: save: {:#?}", uuid, fetch_time.as_secs_f32(), decode_time.as_secs_f32(), save_time.as_secs_f32());
         Ok(())
     }
     println!("---Fetch multiple textures parallel start---");
@@ -542,7 +513,6 @@ fn fetch_multiple_textures_parallel() {
             }
             println!("Thread {} done.", n);
         });
-        println!("Started thread {}", workers.len());
         workers.push(worker);
     }
     println!("Started {} worker threads.", workers.len());
