@@ -112,22 +112,10 @@ impl FetchedImage {
         }
         if self.image_opt.as_ref().unwrap().orig_width() <= INITIAL_FETCH_SIZE 
         && self.image_opt.as_ref().unwrap().orig_height() <= INITIAL_FETCH_SIZE {
-            println!("Tiny image: {}: dimensions: [{}, {}]", url, self.image_opt.as_ref().unwrap().orig_width(), self.image_opt.as_ref().unwrap().orig_height() ); // ***TEMP***
             return Ok(());                         // as big as it will get
         }
         //  Second fetch, now that we have header info.
         self.fetch_and_decode_single(&agent, &url, max_size_opt, bottleneck_opt)
-        /*
-        let stat = self.fetch_and_decode_single(&agent, &url, max_size_opt, bottleneck_opt);
-        //  Sometimes the second fetch fails. Retry at full size. This had better work.
-        if let Err(e) = &stat {
-            if max_size_opt.is_none() { return stat; }                      // already at full size, failed.
-            log::error!("Fetch and decode of {} failed: {:?}, retrying at full size.", url, e); // some JPEG 2000 images have problems.
-            self.fetch_and_decode_single(&agent, &url, None, bottleneck_opt)?;
-            //  ***NEED TO DOWNSIZE IMAGE***
-        }
-        Ok(())
-        */
     }
 
     /// Fetch image from server at indicated size.
@@ -140,7 +128,7 @@ impl FetchedImage {
     ) -> Result<(), AssetError> {
         if self.image_opt.is_none() {
             //  No previous info. Fetch with guess as to size.
-            let bounds: Option<(u32, u32)> = if let Some(max_size) = max_size_opt {
+            let bounds: Option<(usize, usize)> = if let Some(max_size) = max_size_opt {
                 Some((0, estimate_initial_read_size(max_size))) // first guess
             } else {
                 None
@@ -167,14 +155,16 @@ impl FetchedImage {
         } else {
             //  We have a previous image and can be more accurate.
             let stats = self.get_image_stats().unwrap();    // should always get, we just tested for image presence.
-            let (bounds, discard_level) = if let Some(max_size) = max_size_opt {
+            let discard_level = if let Some(max_size) = max_size_opt {
                 let (max_bytes, discard_level) = estimate_read_size(stats.dimensions, stats.bytes_per_pixel, max_size);
-                (Some((0, max_bytes)), discard_level)  // calc bounds to read
+                self.beginning_bytes.append(&mut fetch_asset(agent, url, Some((self.beginning_bytes.len(), max_bytes as usize)))?); // fetch the rest of the asset
+                discard_level // calc bounds to read
             } else {
-                (None, 0)                                    // caller wants full size
+                self.beginning_bytes = fetch_asset(agent, url, None)?; // fetch the entire asset, beginning to end.
+                0                                   // caller wants full size
             };
             //  Now fetch. Currently, from beginning, but we could optimize and reuse the first part.
-            self.beginning_bytes = fetch_asset(agent, url, bounds)?; // fetch the asset
+            ////self.beginning_bytes = fetch_asset(agent, url, bounds)?; // fetch the asset
             let decode_parameters = DecodeParameters::new().reduce(discard_level); // decoded to indicated level
             //  Decoder bottleneck - avoid too many simultaneous CPU-bound tasks
             let decode_result = {
@@ -237,7 +227,7 @@ impl FetchedImage {
 const JPEG_2000_COMPRESSION_FACTOR: f32 = 0.9;
 
 /// Below 1024, JPEG 2000 files tend to break down. This is one packet with room for HTTP headers.
-const MINIMUM_SIZE_TO_READ: u32 = 1024;
+const MINIMUM_SIZE_TO_READ: usize = 1024;
 /// 8192 x 8192 should be a big enough texture for anyone
 const LARGEST_IMAGE_DIMENSION: u32 = 8192;
 
@@ -250,18 +240,18 @@ pub fn estimate_read_size(
     image_size: (u32, u32),
     bytes_per_pixel: u8,
     max_dim: u32,
-) -> (u32, u32) {
+) -> (usize, u32) {
     assert!(max_dim > 0); // would cause divide by zero
     let reduction_ratio = (image_size.0.max(image_size.1)) as u32 / (max_dim as u32);
     if reduction_ratio < 2 {
-        return (u32::MAX, 0); // full size
+        return (usize::MAX, 0); // full size
     }
     //  Not full size, will be reducing.
     let in_pixels = image_size.0 * image_size.1;
     let out_pixels = in_pixels / (reduction_ratio * reduction_ratio); // number of pixels desired in output
     
        //  Read this many bytes and decode.
-    let max_bytes = (((out_pixels as f32) * (bytes_per_pixel as f32)) * JPEG_2000_COMPRESSION_FACTOR) as u32;
+    let max_bytes = (((out_pixels as f32) * (bytes_per_pixel as f32)) * JPEG_2000_COMPRESSION_FACTOR) as usize;
     let max_bytes = max_bytes.max(MINIMUM_SIZE_TO_READ);
     //  Reduction ratio 1 -> discard level 0, 4->1, 16->2, etc. Round down.
     let discard_level = calc_discard_level(reduction_ratio); // ***SCALE***
@@ -281,14 +271,14 @@ fn calc_discard_level(reduction_ratio: u32) -> u32 {
 }
 
 /// Estimate when we don't know what the image size is.
-pub fn estimate_initial_read_size(max_dim: u32) -> u32 {
+pub fn estimate_initial_read_size(max_dim: u32) -> usize {
     const BYTES_PER_PIXEL: u8 = 4;  // worst case estimate
     let square = |x| x * x; // ought to be built in
     if max_dim > LARGEST_IMAGE_DIMENSION {
         // to avoid overflow
-        u32::MAX // no limit
+        usize::MAX // no limit
     } else {
-        ((square(max_dim as f32) * BYTES_PER_PIXEL as f32 * JPEG_2000_COMPRESSION_FACTOR) as u32)
+        ((square(max_dim as f32) * BYTES_PER_PIXEL as f32 * JPEG_2000_COMPRESSION_FACTOR) as usize)
             .max(MINIMUM_SIZE_TO_READ)
     }
 }
@@ -321,7 +311,7 @@ fn test_estimate_read_size() {
                                                       //  Know size of JPEG 2000 image.
     assert_eq!(
         estimate_read_size((64, 64), BYTES_PER_PIXEL, 64),
-        (u32::MAX, 0)
+        (usize::MAX, 0)
     );
     assert_eq!(estimate_read_size((64, 64), BYTES_PER_PIXEL, 32), (MINIMUM_SIZE_TO_READ.max(3686), 1)); // 2:1 reduction
     assert_eq!(
@@ -338,7 +328,7 @@ fn test_estimate_read_size() {
     ); // 8:1 reduction, discard level 3
     assert_eq!(
         estimate_read_size((512, 256), BYTES_PER_PIXEL, 512),
-        (u32::MAX, 0)
+        (usize::MAX, 0)
     ); // no reduction, full size.
 }
 
@@ -503,6 +493,7 @@ fn fetch_multiple_textures_parallel() {
         let bottleneck_clone = Arc::clone(&bottleneck);
         let worker = std::thread::spawn(move || {
             println!("Thread {} starting.", n);
+            let mut cnt: usize = 0;
             thread_priority::set_current_thread_priority(thread_priority::ThreadPriority::Min).unwrap();
             while let Ok(item) = receiver_clone.recv() {
                 if fail_clone.load(Ordering::Relaxed) { break; }
@@ -510,8 +501,9 @@ fn fetch_multiple_textures_parallel() {
                     println!("Thread {} error: {:?}", n, e);
                     fail_clone.store(true, Ordering::Relaxed); // note fail
                 }
+                cnt += 1;   // tally
             }
-            println!("Thread {} done.", n);
+            println!("Thread {} done. {} images processed.", n, cnt);
         });
         workers.push(worker);
     }

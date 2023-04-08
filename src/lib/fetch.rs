@@ -34,7 +34,7 @@ pub fn err_is_retryable(e: &ureq::Error) -> bool {
 fn fetch_asset_once(
     agent: &Agent,
     url: &str,
-    byte_range_opt: Option<(u32, u32)>,
+    byte_range_opt: Option<(usize, usize)>,
 ) -> Result<Vec<u8>, ureq::Error> {
     //  Build query, which may have a byte range specified.
     let query = if let Some(byte_range) = byte_range_opt {
@@ -58,7 +58,7 @@ fn fetch_asset_once(
 pub fn fetch_asset(
     agent: &Agent,
     url: &str,
-    byte_range_opt: Option<(u32, u32)>,
+    byte_range_opt: Option<(usize, usize)>,
 ) -> Result<Vec<u8>, ureq::Error> {
     const FETCH_RETRIES: usize = 3; // try this many times
     const FETCH_RETRY_WAIT: std::time::Duration = std::time::Duration::from_secs(2);    // wait between tries
