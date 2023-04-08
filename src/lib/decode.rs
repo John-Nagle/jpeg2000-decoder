@@ -88,6 +88,42 @@ pub struct FetchedImage {
 }
 
 impl FetchedImage {
+
+    /// Fetch texture image from server at requested size.
+    ///
+    /// 1. Fetch header and small size.
+    /// 2. Fetch at requested size using truncated file.
+    /// 3. Re-fetch at full size if truncated file fails to decode.
+    pub fn fetch(
+        &mut self,
+        agent: &ureq::Agent,
+        url: &str,
+        max_size_opt: Option<u32>,
+        bottleneck_opt: Option<&PvQueueLink>,
+    ) -> Result<(), AssetError> {
+        const INITIAL_FETCH_SIZE: u32 = 16;
+        // First fetch, at 16x16 pixels, to get size info.
+        self.fetch_and_decode_single(&agent, &url, Some(INITIAL_FETCH_SIZE), bottleneck_opt)?;
+        assert!(self.image_opt.is_some()); // got image
+        if let Some(max_size) = max_size_opt {
+            if max_size <= INITIAL_FETCH_SIZE { return Ok(()) }    // already big enough
+        }
+        if self.image_opt.as_ref().unwrap().orig_height() <= INITIAL_FETCH_SIZE 
+        && self.image_opt.as_ref().unwrap().orig_width() <= INITIAL_FETCH_SIZE {
+            return Ok(());                         // as big as it will get
+        }
+        //  Second fetch, now that we have header info.
+        let stat = self.fetch_and_decode_single(&agent, &url, max_size_opt, bottleneck_opt);
+        //  Sometimes the second fetch fails. Retry at full size. This had better work.
+        if let Err(e) = &stat {
+            if max_size_opt.is_none() { return stat; }                      // already at full size, failed.
+            log::error!("Fetch and decode of {} failed: {:?}, retrying at full size.", url, e); // some JPEG 2000 images have problems.
+            self.fetch_and_decode_single(&agent, &url, None, bottleneck_opt)?;
+            //  ***NEED TO DOWNSIZE IMAGE***
+        }
+        Ok(())
+    }
+
     /// Fetch image from server at indicated size.
     fn fetch_and_decode_single(
         &mut self,
@@ -107,6 +143,7 @@ impl FetchedImage {
             let decode_parameters = DecodeParameters::new(); // default decode, best effort
             self.beginning_bytes = fetch_asset(agent, url, bounds)?; // fetch the asset
             let decode_result = {
+                //  Bottleneck the decode operation.
                 let _lok = if let Some(bottleneck) = bottleneck_opt {
                     Some(PvQueue::lock(bottleneck))
                 } else {

@@ -55,3 +55,4 @@ parking_lot = "0.12"
 #   For tests.
 crossbeam-channel = "0.5"
 thread-priority = "0.13"
+log = "0.4"
