@@ -149,6 +149,7 @@ impl FetchedImage {
                 } else {
                     None
                 };
+                profiling::scope!("J2K decode");
                 jpeg2k::Image::from_bytes_with(&self.beginning_bytes, decode_parameters)
             };
             match decode_result {
@@ -176,6 +177,7 @@ impl FetchedImage {
                 } else {
                     None
                 };
+                profiling::scope!("J2K decode");
                 jpeg2k::Image::from_bytes_with(&self.beginning_bytes, decode_parameters)
             };
             match decode_result {
@@ -257,10 +259,6 @@ pub fn estimate_read_size(
     let max_bytes = max_bytes.max(MINIMUM_SIZE_TO_READ);
     //  Reduction ratio 1 -> discard level 0, 4->1, 16->2, etc. Round down.
     let discard_level = calc_discard_level(reduction_ratio); // ***SCALE***
-    println!(
-        "Reduction ratio: {}, discard level {}, bytes to read = {}",
-        reduction_ratio, discard_level, max_bytes
-    ); // ***TEMP***
     (max_bytes, discard_level)
 }
 
@@ -440,9 +438,10 @@ fn fetch_multiple_textures_parallel() {
         const TEXTURE_CAP: &str = "http://asset-cdn.glb.agni.lindenlab.com";
         ////const TEXTURE_OUT_SIZE: Option<u32> = Some(2048);
         let url = format!("{}/?texture_id={}", TEXTURE_CAP, uuid);
-        println!("Asset url: {}", url);
-        let now = std::time::Instant::now();
+        ////println!("Asset url: {}", url);
+        ////let now = std::time::Instant::now();
         let mut image = FetchedImage::default();
+        /*
         // First fetch
         let stat = image.fetch_and_decode_single(&agent, &url, Some(16), Some(&bottleneck));
         if let Err(e) = stat {
@@ -469,8 +468,21 @@ fn fetch_multiple_textures_parallel() {
             println!("====> Second fetch failed: {:?} retry at full size. <====", e);
             image.fetch_and_decode_single(&agent, &url, None, Some(&bottleneck)).map_err(|e| anyhow!("Third fetch error: {:?}",e))?;
         }
+        */
+        let stat = image.fetch(&agent, &url, Some(max_size), Some(bottleneck));
+        if let Err(e) = stat {
+            println!("Fetch error for url {}: {:?}", uuid, e);
+            match e {
+                AssetError::Http(ureq::Error::Status(http_status,_)) => {                   
+                    if http_status == 404 {
+                        return Ok(())   // ignore file not found problem
+                    }
+                }
+                _ => {}
+            }
+            return Err(anyhow!("Fetch error for url {}: {:?}", uuid, e));
+        }
         let _lok = PvQueue::lock(bottleneck);   // bottleneck the saving part
-
         let now = std::time::Instant::now();
         let img: DynamicImage = (&image.image_opt.unwrap())
             .try_into()
@@ -479,15 +491,9 @@ fn fetch_multiple_textures_parallel() {
         let now = std::time::Instant::now();
 
         let out_file = format!("/tmp/TEST-{}.png", uuid); // Linux only
-        println!(
-            "Output file {}: ({}, {})",
-            out_file,
-            img.width(),
-            img.height()
-        );
         img.save(out_file).expect("File save failed"); // save as PNG file
-        let save_time = now.elapsed();
-        println!("File {} fetch: {:#?}, decode {:#?}: save: {:#?}", uuid, fetch_time.as_secs_f32(), decode_time.as_secs_f32(), save_time.as_secs_f32());
+        ////let save_time = now.elapsed();
+        ////println!("File {} fetch: {:#?}, decode {:#?}: save: {:#?}", uuid, fetch_time.as_secs_f32(), decode_time.as_secs_f32(), save_time.as_secs_f32());
         Ok(())
     }
     println!("---Fetch multiple textures parallel start---");
