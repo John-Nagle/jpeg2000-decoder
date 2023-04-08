@@ -431,6 +431,7 @@ fn fetch_multiple_textures_parallel() {
     use std::sync::Arc;
     use anyhow::{anyhow, Error};
     use crate::{PvQueue, PvQueueLink};
+    simple_logger::init_with_level(log::Level::Error).unwrap();    // so logging shows up
     ////const TEST_UUIDS: &str = "samples/bugislanduuidlist.txt"; // test of UUIDs at Bug Island, some of which have problems.
     const TEST_UUIDS: &str = "samples/biguuidlist.txt"; // Larger 44K list of non-public UUIDs.
     const USER_AGENT: &str = "Test asset fetcher. Contact info@animats.com if problems.";
