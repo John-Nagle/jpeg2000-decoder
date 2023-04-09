@@ -157,7 +157,8 @@ impl FetchedImage {
             let stats = self.get_image_stats().unwrap();    // should always get, we just tested for image presence.
             let discard_level = if let Some(max_size) = max_size_opt {
                 let (max_bytes, discard_level) = estimate_read_size(stats.dimensions, stats.bytes_per_pixel, max_size);
-                self.beginning_bytes.append(&mut fetch_asset(agent, url, Some((self.beginning_bytes.len(), max_bytes as usize)))?); // fetch the rest of the asset
+                ////self.beginning_bytes.append(&mut fetch_asset(agent, url, Some((self.beginning_bytes.len(), max_bytes as usize)))?); // fetch the rest of the asset
+                self.beginning_bytes = fetch_asset(agent, url, Some((0, max_bytes as usize)))?; // fetch the entire asset, beginning to end.
                 discard_level // calc bounds to read
             } else {
                 self.beginning_bytes = fetch_asset(agent, url, None)?; // fetch the entire asset, beginning to end.
