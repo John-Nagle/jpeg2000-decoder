@@ -21,16 +21,8 @@ use crate::{PvQueue, PvQueueLink};
 use image::DynamicImage;
 use image::GenericImageView;
 use jpeg2k::DecodeParameters;
+use anyhow::{anyhow, Error};
 use std::convert;
-/*
-use anyhow::{Error};
-use jpeg2k::*;
-use image::{DynamicImage};
-use std::fs::File;
-use std::io::Read;
-use std::io::BufReader;
-use image::GenericImageView;
-*/
 
 /// Things that can go wrong with an asset.
 #[derive(Debug)]
@@ -183,6 +175,22 @@ impl FetchedImage {
                 Err(e) => return Err(e.into()),
             };
             self.sanity_check()                     // sanity check after decode
+        }
+    }
+    
+    /// Get decoded image
+    pub fn get_dynamic_image(&self, bottleneck_opt: Option<&PvQueueLink>) -> Result<DynamicImage, Error> {
+        //  Apply concurrency bottleneck
+        let _lok = if let Some(bottleneck) = bottleneck_opt {
+            Some(PvQueue::lock(bottleneck))
+        } else {
+            None
+        };
+        profiling::scope!("J2K to image");
+        if let Some(image) = &self.image_opt {
+            image.try_into().map_err(|e| anyhow!("Error converting JPEG 2000 image to final output: {:?}", e))
+        } else {
+            Err(anyhow!("No image was decoded."))   // error by caller, should not have called
         }
     }
     
