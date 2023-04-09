@@ -1,0 +1,49 @@
+Bad decode:
+
+http://asset-cdn.glb.agni.lindenlab.com/?texture_id=1ca37db5-a6d8-7be3-f841-823d4806f2fb
+
+Image stats: Some(ImageStats { bytes_per_pixel: 3, dimensions: (512, 512) })
+Reduction ratio: 2, discard level 1, bytes to read = 176947
+File 1c6e5a97-adc6-e45f-3f01-3d79419bc850 fetch: 0.0543166, decode 0.0929761: save: 0.001713991
+Asset url: http://asset-cdn.glb.agni.lindenlab.com/?texture_id=1ca37db5-a6d8-7be3-f841-823d4806f2fb
+Thread 11 error: Fetch error: Jpeg(CodecError("Failed to decode image"))
+
+This previously decoded successfully at full size.
+
+File 1c58c610-0cf7-76d2-dca4-2b84642e6ac9 fetch: 0.0958088, decode 0.09337349: save: 0.00033484
+Asset url: http://asset-cdn.glb.agni.lindenlab.com/?texture_id=1c80f1c5-06e4-50bc-3695-44d410e58b37
+Image stats: Some(ImageStats { bytes_per_pixel: 3, dimensions: (1024, 1024) })
+Reduction ratio: 4, discard level 2, bytes to read = 176947
+Output file /tmp/TEST-1c524b75-fd40-c0df-cbb3-fae9cd3411de.png: (256, 256)
+File 1c524b75-fd40-c0df-cbb3-fae9cd3411de fetch: 0.106907144, decode 0.12356325: save: 0.001823345
+Asset url: http://asset-cdn.glb.agni.lindenlab.com/?texture_id=1c812b54-b118-0431-4663-2a2f844faed0
+Thread 6 error: Fetch error: Jpeg(CodecError("Failed to decode image"))
+
+File 1c7d73e0-e297-0dda-13f8-3c42fd9324c7 fetch: 0.055306066, decode 0.043678135: save: 0.003457898
+Asset url: http://asset-cdn.glb.agni.lindenlab.com/?texture_id=1c97534e-1e10-567a-802c-e53db4ff1689
+Thread 15 error: Fetch error: Jpeg(CodecError("Failed to decode image"))
+
+Not repeatable. Turn off parallism and try again.
+
+Single thread mode, output size max 256x256
+
+Asset url: http://asset-cdn.glb.agni.lindenlab.com/?texture_id=1c688894-3d46-24d5-f85e-e3450c487cf8
+Image stats: Some(ImageStats { bytes_per_pixel: 3, dimensions: (1024, 1024) })
+Reduction ratio: 4, discard level 2, bytes to read = 176947
+Thread 0 error: Fetch error: Jpeg(CodecError("Failed to decode image"))
+Thread 0 done.
+
+Repeatable:
+
+Asset url: http://asset-cdn.glb.agni.lindenlab.com/?texture_id=1c688894-3d46-24d5-f85e-e3450c487cf8
+Image stats: Some(ImageStats { bytes_per_pixel: 3, dimensions: (1024, 1024) })
+Reduction ratio: 4, discard level 2, bytes to read = 176947
+Thread 0 error: Fetch error: Jpeg(CodecError("Failed to decode image"))
+Thread 0 done.
+
+Asset url: http://asset-cdn.glb.agni.lindenlab.com/?texture_id=1c688894-3d46-24d5-f85e-e3450c487cf8
+Image stats: Some(ImageStats { bytes_per_pixel: 3, dimensions: (1024, 1024) })
+Reduction ratio: 4, discard level 2, bytes to read = 176947
+Thread 0 error: Fetch error: Jpeg(CodecError("Failed to decode image"))
+
+OK, repeatable fail.

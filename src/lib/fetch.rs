@@ -67,9 +67,10 @@ pub fn fetch_asset(
         match fetch_asset_once(agent, url, byte_range_opt) {
             Ok(v) => return Ok(v),
             Err(e) => {
-                if err_is_retryable(&e) && retries > 0 {
+                if err_is_retryable(&e) && retries > 0 {           
                     std::thread::sleep(FETCH_RETRY_WAIT);   // wait before retry
                     retries -= 1;
+                    log::error!("Retrying asset url {} after error {:?}, {} of {} retries left.", url, e, retries, FETCH_RETRIES);
                 } else {
                     return Err(e);     // not retryable or out of retries, fails
                 }
