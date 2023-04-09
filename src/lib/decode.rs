@@ -467,7 +467,7 @@ fn fetch_multiple_textures_parallel() {
     let file = std::fs::File::open(format!("{}/{}", basedir, TEST_UUIDS)).expect("Unable to open file of test UUIDs");
     let reader = std::io::BufReader::new(file);
     const TEXTURE_OUT_SIZE: u32 = 512;
-    const WORKERS: usize = 48;  // push hard here
+    const WORKERS: usize = 18;  // push hard here
     const BOTTLENECK_COUNT: u32 = 6;            // no more than this many at one time in compute-bound decode
     let bottleneck = PvQueue::new(BOTTLENECK_COUNT);
     let agent = build_agent(USER_AGENT, 1);
