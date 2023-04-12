@@ -10,7 +10,7 @@
 #
 [package]
 name = "jpeg2000-decoder"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 authors = ["John Nagle <nagle@animats.com>"]
 license = "LGPL"
@@ -40,8 +40,8 @@ jpeg2k = {version = "0.6.3", default-features = false, features = ["image", "str
 serde-llsd = "0.1.0"
 
 #   Images
-#### image = "0.24.5" -- jpeg2k needs an older version.
-image = "0.23.14"
+image = {version = "0.24.6", default-features = false, features = ["png"]}
+####image = "0.23.14"
 
 #   Network
 ureq = "2.6.2"
