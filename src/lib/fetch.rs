@@ -6,7 +6,8 @@
 //  Loader for texture assets
 //
 use std::time::Duration;
-use ureq::{Agent, AgentBuilder};
+use ureq::{Agent, config::Config};
+use std::io::Read;
 
 /// Something has gone wrong if idle for this long.
 const NETWORK_TIMEOUT: Duration = Duration::from_secs(15);
@@ -14,8 +15,8 @@ const NETWORK_TIMEOUT: Duration = Duration::from_secs(15);
 /// Is this HTTP fetch error retryable?
 pub fn err_is_retryable(e: &ureq::Error) -> bool {
     match e {
-        ureq::Error::Transport(_) => true, // always retry network errors
-        ureq::Error::Status(status_code, _) => {
+        ureq::Error::Io(_) => true, // always retry network errors
+        ureq::Error::StatusCode(status_code) => {
             match status_code {
                 400 => false, // bad request
                 401 => false, // forbidden
@@ -26,6 +27,7 @@ pub fn err_is_retryable(e: &ureq::Error) -> bool {
                 _ => true,    // retry everything else
             }
         }
+        _ => false,
     }        
 }
 
@@ -38,17 +40,19 @@ fn fetch_asset_once(
 ) -> Result<Vec<u8>, ureq::Error> {
     //  Build query, which may have a byte range specified.
     let query = if let Some(byte_range) = byte_range_opt {
-        agent.get(&url).set(
+        agent.get(url)
+        .header(
             "Range",
             format!("bytes={}-{}", byte_range.0, byte_range.1).as_str(),
         )
     } else {
-        agent.get(&url)
+        agent.get(url)
     };
     //  HTTP/HTTPS read.
     let resp = query.call()?;
     let mut buffer = Vec::new();
-    resp.into_reader().read_to_end(&mut buffer)?;
+    let (_, body) = resp.into_parts();
+    body.into_reader().read_to_end(&mut buffer)?;
     Ok(buffer)
 }
 
@@ -81,13 +85,15 @@ pub fn fetch_asset(
 
 /// Build user agent for queries.
 pub fn build_agent(user_agent: &str, max_connections: usize) -> Agent {
-    AgentBuilder::new()
+    /////ureq::agent()
+    let config = Config::builder()
         .user_agent(user_agent)
         .max_idle_connections_per_host(max_connections) // we mostly hit the same host, so we want more idle connections available
-        .timeout_connect(NETWORK_TIMEOUT)
-        .timeout_read(NETWORK_TIMEOUT)
-        .timeout_write(NETWORK_TIMEOUT)
-        .build()
+        .timeout_connect(Some(NETWORK_TIMEOUT))
+        .timeout_global(Some(NETWORK_TIMEOUT))
+        //////.timeout_write(NETWORK_TIMEOUT)
+        .build();
+    Agent::new_with_config(config)
 }
 
 #[test]

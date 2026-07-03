@@ -450,7 +450,7 @@ fn fetch_multiple_textures_parallel() {
         if let Err(e) = stat {
             println!("Fetch error for url {}: {:?}", uuid, e);
             match e {
-                AssetError::Http(ureq::Error::Status(http_status,_)) => {                   
+                AssetError::Http(ureq::Error::StatusCode(http_status)) => {                   
                     if http_status == 404 {
                         return Ok(())   // ignore file not found problem
                     }
