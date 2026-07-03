@@ -95,7 +95,8 @@ fn testpvqueuethreaded() {
                 let cnt = active_clone.fetch_add(1, std::sync::atomic::Ordering::Relaxed);    // count of others active.
                 println!("Thread #{} start, {} actives.", n, cnt + 1);
                 assert!(cnt < BOTTLENECK_COUNT);    // must not have too many actives inside the bottleneck.
-                std::thread::sleep_ms(100); // stall;
+                //////std::thread::sleep_ms(100); // stall;
+                std::thread::sleep(std::time::Duration::from_millis(100)); // stall
                 let _ = active_clone.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
                 println!("Thread #{} done.", n);
             }         

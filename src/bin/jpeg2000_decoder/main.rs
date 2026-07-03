@@ -3,16 +3,12 @@
 //  Animats
 //  April, 2023
 //
-
 use anyhow::Error;
 use image::DynamicImage;
-use image::GenericImageView;
 use jpeg2k::*;
 use std::fs::File;
 use std::io::BufReader;
 use std::io::Read;
-
-use jpeg2000_decoder::{estimate_initial_read_size, fetch_asset};
 
 /// Arguments to the program
 #[derive(Clone, Debug, Default)]
@@ -26,6 +22,7 @@ struct ArgInfo {
     /// Reduction factor
     pub reduction_factor: u8,
     /// Verbose mode
+    #[allow(unused_variables)]
     pub verbose: bool,
 }
 
@@ -73,6 +70,7 @@ fn decompress_one_file(
     out_file: &str,
     max_size: usize,
     reduction: u8,
+    #[allow(unused_variables)]
     verbose: bool,
 ) -> Result<(), Error> {
     // Initial dumb version.

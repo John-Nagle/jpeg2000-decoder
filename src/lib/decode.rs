@@ -16,10 +16,9 @@
 //! * bpp -- not used, deprecated. Ref: https://github.com/uclouvain/openjpeg/pull/1383
 //! * resno_decoded -- Not clear, should be the number of discard levels available.
 
-use crate::fetch::{build_agent, fetch_asset, err_is_retryable};
+use crate::fetch::{fetch_asset, err_is_retryable};
 use crate::{PvQueue, PvQueueLink};
 use image::DynamicImage;
-use image::GenericImageView;
 use jpeg2k::DecodeParameters;
 use anyhow::{anyhow, Error};
 use std::convert;
@@ -345,7 +344,7 @@ fn test_estimate_read_size() {
 #[test]
 fn fetch_test_texture() {
     use image::DynamicImage;
-    use image::GenericImageView;
+    use crate::fetch::{build_agent};
     const TEXTURE_DEFAULT: &str = "89556747-24cb-43ed-920b-47caed15465f"; // plywood in both Second Life and Open Simulator
     const TEXTURE_CAP: &str = "http://asset-cdn.glb.agni.lindenlab.com";
     const USER_AGENT: &str = "Test asset fetcher. Contact info@animats.com if problems.";
@@ -374,7 +373,7 @@ fn fetch_test_texture() {
 #[test]
 fn fetch_multiple_textures_serial() {
     use image::DynamicImage;
-    use image::GenericImageView;
+    use crate::fetch::build_agent;
     use std::io::BufRead;
     ////const TEST_UUIDS: &str = "samples/smalluuidlist.txt"; // test of UUIDs, relative to manifest dir
     const TEST_UUIDS: &str = "samples/bugislanduuidlist.txt"; // test of UUIDs at Bug Island, some of which have problems.
@@ -431,12 +430,12 @@ fn fetch_multiple_textures_serial() {
 #[test]
 fn fetch_multiple_textures_parallel() {
     use image::DynamicImage;
-    use image::GenericImageView;
     use std::io::BufRead;
     use core::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
     use anyhow::{anyhow, Error};
     use crate::{PvQueue, PvQueueLink};
+    use crate::fetch::build_agent;
     simple_logger::init_with_level(log::Level::Error).unwrap();    // so logging shows up
     log::error!("Errors go to standard output.");
     ////const TEST_UUIDS: &str = "samples/bugislanduuidlist.txt"; // test of UUIDs at Bug Island, some of which have problems.
@@ -451,7 +450,7 @@ fn fetch_multiple_textures_parallel() {
             println!("Fetch error for url {}: {:?}", uuid, e);
             match e {
                 AssetError::Http(ureq::Error::StatusCode(http_status)) => {                   
-                    if http_status == 404 {
+                    if http_status == 404 || http_status == 403 {
                         return Ok(())   // ignore file not found problem
                     }
                 }
@@ -460,7 +459,7 @@ fn fetch_multiple_textures_parallel() {
             return Err(anyhow!("Fetch error for url {}: {:?}", uuid, e));
         }
         let _lok = PvQueue::lock(bottleneck);   // bottleneck the saving part
-        let now = std::time::Instant::now();
+        let _now = std::time::Instant::now();
         let img: DynamicImage = (&image.image_opt.unwrap())
             .try_into()
             .expect("Conversion failed"); // convert
@@ -486,7 +485,7 @@ fn fetch_multiple_textures_parallel() {
             let line = line.trim().to_string();
             if line.is_empty() { continue }
             if line.starts_with('#') { continue }
-            sender.send(line.clone());
+            let _ = sender.send(line.clone());
         }
         receiver                                        // drop sender, for EOF
     };
@@ -520,7 +519,7 @@ fn fetch_multiple_textures_parallel() {
     println!("Started {} worker threads.", workers.len());
     for worker in workers { 
         println!("Waiting for threads to finish.");
-        worker.join();
+        let _ = worker.join();
     }
     if fail.load(std::sync::atomic::Ordering::Relaxed) { panic!("A decode or fetch failed."); }
     println!("Done.");

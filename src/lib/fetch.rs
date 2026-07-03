@@ -16,6 +16,7 @@ const NETWORK_TIMEOUT: Duration = Duration::from_secs(15);
 pub fn err_is_retryable(e: &ureq::Error) -> bool {
     match e {
         ureq::Error::Io(_) => true, // always retry network errors
+        ureq::Error::Timeout(_) => true, // always retry timeouts
         ureq::Error::StatusCode(status_code) => {
             match status_code {
                 400 => false, // bad request
@@ -84,6 +85,8 @@ pub fn fetch_asset(
 }
 
 /// Build user agent for queries.
+/// Test only.
+#[allow(dead_code)]
 pub fn build_agent(user_agent: &str, max_connections: usize) -> Agent {
     /////ureq::agent()
     let config = Config::builder()
