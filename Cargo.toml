@@ -34,13 +34,13 @@ path = "src/bin/jpeg2000_decoder/main.rs" # replace bin.rs with name of your fil
 
 #   The OpenJPEG decoder.
 ####jpeg2k = "0.6.2"
-jpeg2k = {version = "0.6.3", default-features = false, features = ["image", "strict-mode", "openjpeg-sys"]}
+jpeg2k = {version = "0.10", default-features = false, features = ["image", "strict-mode", "openjpeg-sys"]}
 
 #   LLSD handler
 serde-llsd = "0.1.0"
 
 #   Images
-image = {version = "0.24.6", default-features = false, features = ["png"]}
+image = {version = "0.25", default-features = false, features = ["png"]}
 ####image = "0.23.14"
 
 #   Network
