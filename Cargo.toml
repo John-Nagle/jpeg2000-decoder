@@ -10,7 +10,7 @@
 #
 [package]
 name = "jpeg2000-decoder"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 authors = ["John Nagle <nagle@animats.com>"]
 license = "LGPL"
@@ -37,7 +37,7 @@ path = "src/bin/jpeg2000_decoder/main.rs" # replace bin.rs with name of your fil
 jpeg2k = {version = "0.10", default-features = false, features = ["image", "strict-mode", "openjpeg-sys"]}
 
 #   LLSD handler
-serde-llsd = "0.1.0"
+serde-llsd = "0.3.6"
 
 #   Images
 image = {version = "0.25", default-features = false, features = ["png"]}
